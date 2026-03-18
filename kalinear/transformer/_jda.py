@@ -5,7 +5,9 @@ import numpy as np
 from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
-from ..utils import mmd_coef, base_init
+
+from ..utils import base_init, mmd_coef
+
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
 # Implementation of three transfer learning methods:
@@ -17,7 +19,7 @@ from ..utils import mmd_coef, base_init
 # Transfer Component Analysis," in IEEE Transactions on Neural Networks,
 # vol. 22, no. 2, pp. 199-210, Feb. 2011.
 # [2] Mingsheng Long, Jianmin Wang, Guiguang Ding, Jiaguang Sun, Philip S. Yu,
-# Transfer Feature Learning with Joint Distribution Adaptation, IEEE 
+# Transfer Feature Learning with Joint Distribution Adaptation, IEEE
 # International Conference on Computer Vision (ICCV), 2013.
 # [3] Wang, J., Chen, Y., Hao, S., Feng, W. and Shen, Z., 2017, November. Balanced
 # distribution adaptation for transfer learning. In Data Mining (ICDM), 2017
@@ -26,7 +28,7 @@ from ..utils import mmd_coef, base_init
 
 
 class JDA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', lambda_=1.0, mu=1.0, **kwargs):
+    def __init__(self, n_components, kernel="linear", lambda_=1.0, mu=1.0, **kwargs):
         """
         Parameters
             n_components: n_components after (n_components <= min(d, n))
@@ -56,15 +58,15 @@ class JDA(BaseEstimator, TransformerMixin):
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None.
         """
-        if type(Xt) == np.ndarray:
+        if type(Xt) is np.ndarray:
             X = np.vstack((Xs, Xt))
             ns = Xs.shape[0]
             nt = Xt.shape[0]
 
             if ys is not None and yt is not None:
-                L = mmd_coef(ns, nt, ys, yt, kind='joint', mu=self.mu)
+                L = mmd_coef(ns, nt, ys, yt, kind="joint", mu=self.mu)
             else:
-                L = mmd_coef(ns, nt, kind='marginal', mu=0)
+                L = mmd_coef(ns, nt, kind="marginal", mu=0)
         else:
             X = Xs
             L = np.zeros((X.shape[0], X.shape[0]))
@@ -76,11 +78,11 @@ class JDA(BaseEstimator, TransformerMixin):
         # constraint subject to
         st = np.dot(np.dot(ker_x, ctr_mat), ker_x.T)
         eig_values, eig_vectors = eig(obj, st)
-        
+
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
-#        idx_sorted = np.argsort(ev_abs)[:self.n_components]
+        #        idx_sorted = np.argsort(ev_abs)[:self.n_components]
         idx_sorted = np.argsort(ev_abs)
-        
+
         U = np.zeros(eig_vectors.shape)
         U[:, :] = eig_vectors[:, idx_sorted]
         self.U = np.asarray(U, dtype=np.float)
@@ -88,7 +90,7 @@ class JDA(BaseEstimator, TransformerMixin):
         self.Xt = Xt
 
         return self
-    
+
     def transform(self, X):
         """
         Parameters
@@ -107,8 +109,8 @@ class JDA(BaseEstimator, TransformerMixin):
         X_fit = np.vstack((self.Xs, self.Xt))
         ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        return np.dot(ker_x, self.U[:, :self.n_components])
-    
+        return np.dot(ker_x, self.U[:, : self.n_components])
+
     def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """
         Parameters

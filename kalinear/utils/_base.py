@@ -1,13 +1,12 @@
 import numpy as np
-from numpy.linalg import multi_dot, inv
+from numpy.linalg import inv, multi_dot
 from scipy.linalg import sqrtm
 from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.neighbors import kneighbors_graph
 
 
-def lap_norm(X, n_neighbour=3, metric='cosine', mode='distance',
-             normalise=True):
+def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True):
     """[summary]
 
     Parameters
@@ -32,11 +31,10 @@ def lap_norm(X, n_neighbour=3, metric='cosine', mode='distance',
         [description]
     """
     n = X.shape[0]
-    knn_graph = kneighbors_graph(X, n_neighbour, metric=metric,
-                                 mode=mode).toarray()
+    knn_graph = kneighbors_graph(X, n_neighbour, metric=metric, mode=mode).toarray()
     W = np.zeros((n, n))
     knn_idx = np.logical_or(knn_graph, knn_graph.T)
-    if mode == 'distance':
+    if mode == "distance":
         graph_kernel = pairwise_distances(X, metric=metric)
         W[knn_idx] = graph_kernel[knn_idx]
     else:
@@ -51,18 +49,18 @@ def lap_norm(X, n_neighbour=3, metric='cosine', mode='distance',
     return lap_mat
 
 
-def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=0.5):
+def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
     n = ns + nt
     e = np.zeros((n, 1))
     e[:ns, 0] = 1.0 / ns
     e[ns:, 0] = -1.0 / nt
     M = np.dot(e, e.T)  # marginal mmd coefficients
 
-    if kind == 'joint' and ys is not None:
+    if kind == "joint" and ys is not None:
         Mc = 0  # conditional mmd coefficients
         class_all = np.unique(ys)
         if yt is not None and class_all.all() != np.unique(yt).all():
-            raise ValueError('Source and target domain should have the same labels')
+            raise ValueError("Source and target domain should have the same labels")
 
         for c in class_all:
             es = np.zeros([ns, 1])
@@ -73,12 +71,11 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind='marginal', mu=0.5):
             e = np.vstack((es, et))
             e[np.where(np.isinf(e))[0]] = 0
             Mc = Mc + mu * np.dot(e, e.T)
-        M = (1 - mu) * M + mu *  Mc  # joint mmd coefficients
+        M = (1 - mu) * M + mu * Mc  # joint mmd coefficients
     return M
 
 
-def base_init(X, kernel='linear', **kwargs):
-
+def base_init(X, kernel="linear", **kwargs):
     n = X.shape[0]
     # Construct kernel matrix
     ker_x = pairwise_kernels(X, metric=kernel, filter_params=True, **kwargs)
@@ -86,6 +83,6 @@ def base_init(X, kernel='linear', **kwargs):
 
     unit_mat = np.eye(n)
     # Construct centering matrix
-    ctr_mat = unit_mat - 1. / n * np.ones((n, n))
+    ctr_mat = unit_mat - 1.0 / n * np.ones((n, n))
 
     return ker_x, unit_mat, ctr_mat, n

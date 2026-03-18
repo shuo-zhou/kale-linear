@@ -1,0 +1,49 @@
+# Python runtime artefacts
+*/**/__pycache__
+*/__pycache__
+
+# Python virtual environments
+.venv/
+venv/
+
+# Large data, model checkpoints, and binary artefacts
+*.dcm
+*.pt
+*.pth
+*.zip
+*.ckpt
+*.json
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Pycharm
+.idea
+
+# vscode
+.vscode
+
+# Logs
+log-*.txt
+*gitdiff.patch
+
+
+# Testing
+.coverage
+cov*.xml
+tests/test_data
+tests/*/tests
+
+# Lightning
+lightning_logs
+tb_logs/*
+outputs/*
+
+# Jupyter Notebook Checkpoints
+*-checkpoint.ipynb
+
+# Examples
+# cmri_mpca - the saved images
+examples/cmri_mpca/outputs

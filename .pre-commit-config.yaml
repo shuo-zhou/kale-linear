@@ -1,0 +1,47 @@
+repos:
+-   repo: https://github.com/datarootsio/databooks
+    rev: 1.3.7
+    hooks:
+    -   id: databooks-meta
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.4.0
+    hooks:
+    -   id: check-added-large-files
+        args: ['--maxkb=300']
+    -   id: check-byte-order-marker
+    -   id: check-case-conflict
+    -   id: check-merge-conflict
+    -   id: end-of-file-fixer
+    -   id: forbid-new-submodules
+    -   id: mixed-line-ending
+    -   id: trailing-whitespace
+    -   id: debug-statements
+    -   id: check-yaml
+        exclude: .conda/meta.yaml
+    -   id: requirements-txt-fixer
+-   repo: https://github.com/pycqa/flake8.git
+    rev: 6.1.0
+    hooks:
+    -   id: flake8
+        additional_dependencies: [flake8-print, "importlib-metadata<5.0.0"]
+        args: [--config=setup.cfg]
+        exclude: ^examples/
+-   repo: https://github.com/psf/black
+    rev: 23.11.0
+    hooks:
+    -   id: black
+        language_version: python3
+        additional_dependencies: ['click==8.0.4']
+-   repo: https://github.com/pycqa/isort
+    rev: 5.11.2
+    hooks:
+      - id: isort
+        name: isort
+        entry: python -m isort
+        args: [--settings-path, ./pyproject.toml]
+        language: system
+        types: [python]
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.0
+    hooks:
+    -   id: mypy

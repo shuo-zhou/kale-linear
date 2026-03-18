@@ -2,20 +2,20 @@
 # @author: Shuo Zhou, The University of Sheffield, szhou20@sheffield.ac.uk
 # =============================================================================
 import numpy as np
-from scipy.linalg import eig
 from numpy.linalg import multi_dot
+from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
+
 # from sklearn.utils.validation import check_is_fitted
-from ..utils import lap_norm, mmd_coef, base_init
+from ..utils import base_init, lap_norm, mmd_coef
 
 
 class TCA(BaseEstimator, TransformerMixin):
-    def __init__(self, n_components, kernel='linear', lambda_=1.0,
-                 mu=1.0, gamma_=0.5, k=3, **kwargs):
+    def __init__(self, n_components, kernel="linear", lambda_=1.0, mu=1.0, gamma_=0.5, k=3, **kwargs):
         """Transfer Component Analysis: TCA
-        
+
         Parameters
         ----------
         n_components : int
@@ -40,7 +40,7 @@ class TCA(BaseEstimator, TransformerMixin):
         self.n_components = n_components
         self.kwargs = kwargs
         self.kernel = kernel
-        self.lambda_ = lambda_ 
+        self.lambda_ = lambda_
         self.mu = mu
         self.gamma_ = gamma_
         self.k = k
@@ -62,11 +62,11 @@ class TCA(BaseEstimator, TransformerMixin):
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None
         """
-        if type(Xt) == np.ndarray:
+        if type(Xt) is np.ndarray:
             X = np.vstack((Xs, Xt))
             ns = Xs.shape[0]
             nt = Xt.shape[0]
-            L = mmd_coef(ns, nt, kind='marginal', mu=0)
+            L = mmd_coef(ns, nt, kind="marginal", mu=0)
             L[np.isnan(L)] = 0
         else:
             X = Xs
@@ -81,16 +81,16 @@ class TCA(BaseEstimator, TransformerMixin):
             ys_mat = self._lb.fit_transform(ys)
             n_class = ys_mat.shape[1]
             y = np.zeros((n, n_class))
-            y[:ys_mat.shape[0], :] = ys_mat[:]
+            y[: ys_mat.shape[0], :] = ys_mat[:]
             if yt is not None:
                 yt_mat = self._lb.transform(yt)
-                y[ys_mat.shape[0]:yt_mat.shape[0], :] = yt_mat[:]
+                y[ys_mat.shape[0] : yt_mat.shape[0], :] = yt_mat[:]
             ker_y = self.gamma_ * np.dot(y, y.T) + (1 - self.gamma_) * unit_mat
-            lap_mat = lap_norm(X, n_neighbour=self.k, mode='connectivity')
+            lap_mat = lap_norm(X, n_neighbour=self.k, mode="connectivity")
             obj += multi_dot([ker_x, (L + self.mu * lap_mat), ker_x.T])
             st += multi_dot([ker_x, ctr_mat, ker_y, ctr_mat, ker_x.T])
         # obj = np.trace(np.dot(ker_x,L))
-        else: 
+        else:
             obj += multi_dot([ker_x, L, ker_x.T])
 
         eig_values, eig_vectors = eig(obj, st)
@@ -117,10 +117,9 @@ class TCA(BaseEstimator, TransformerMixin):
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
         X_fit = np.vstack((self.Xs, self.Xt))
-        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel,
-                                 filter_params=True, **self.kwargs)
+        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        return np.dot(ker_x, self.U[:, :self.n_components])
+        return np.dot(ker_x, self.U[:, : self.n_components])
 
     def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """

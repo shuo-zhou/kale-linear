@@ -1,5 +1,6 @@
-# PyDALE
-A Domain Adaptation LEarning Python library.
+# Kale-Linear
+
+Knowledge-aware learning linear methods.
  <!-- and tensor (multi-linear) regression -->
 
 This package contains implementations of the following methods:
@@ -28,7 +29,7 @@ This package contains implementations of the following methods:
 
 ##### Learning low-dimensional embedding for input data `X`
 ```
-From pydale.transformer.tca import TCA
+From kalinear.transformer.tca import TCA
 
 transformer = TCA(n_components=2)
 X_transformed = transformer.fit_transform(X)
@@ -39,7 +40,7 @@ X_transformed = transformer.fit_transform(X)
 Example 1: Using Manifold Regularisation Learning Framework
 ```
 import numpy as np
-From pydale.estimator.manifold_learn import LapSVM
+From kalinear.estimator.manifold_learn import LapSVM
 
 clf = LapSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys)
@@ -48,7 +49,7 @@ y_pred = clf.predict(Xt)
 
 Example 2: Using Adaptation Regularisation Learning Framework
 ```
-From pydale.estimator.artl import ARSVM
+From kalinear.estimator.artl import ARSVM
 
 clf = ARSVM()
 clf.fit(Xs, ys, Xt)
@@ -57,7 +58,7 @@ y_pred = clf.predict(Xt)
 
 Example 3: Using Side Information Dependence Regularisation Learning Framework
 ```
-From pydale.estimator.sider import SIDeRSVM
+From kalinear.estimator.sider import SIDeRSVM
 
 ns = Xs.shape[0]
 nt = Xt.shape[0]

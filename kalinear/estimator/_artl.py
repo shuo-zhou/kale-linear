@@ -3,16 +3,18 @@
 # =============================================================================
 import numpy as np
 from numpy.linalg import multi_dot
-from sklearn.utils.validation import check_is_fitted
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
-from ..utils.multiclass import score2pred
+from sklearn.utils.validation import check_is_fitted
+
 from ..utils import lap_norm, mmd_coef
+from ..utils.multiclass import score2pred
 from .base import SSLFramework
+
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
-# Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013. 
-# Adaptation regularization: A general framework for transfer learning. 
+# Ref: Long, M., Wang, J., Ding, G., Pan, S.J. and Philip, S.Y., 2013.
+# Adaptation regularization: A general framework for transfer learning.
 # IEEE Transactions on Knowledge and Data Engineering, 26(5), pp.1076-1089.
 # =============================================================================
 
@@ -46,11 +48,11 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
 
     """
 
-    if type(Xt) == np.ndarray:
+    if type(Xt) is np.ndarray:
         X = np.concatenate([Xs, Xt], axis=0)
         ns = Xs.shape[0]
         nt = Xt.shape[0]
-        M = mmd_coef(ns, nt, ys, yt, kind='joint')
+        M = mmd_coef(ns, nt, ys, yt, kind="joint")
     else:
         X = Xs.copy()
         M = np.zeros((X.shape[0], X.shape[0]))
@@ -68,8 +70,18 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
 
 
 class ARSVM(SSLFramework):
-    def __init__(self, C=1.0, kernel='linear', lambda_=1.0, gamma_=0.0, k_neighbour=5,
-                 solver='osqp', manifold_metric='cosine', knn_mode='distance', **kwargs):
+    def __init__(
+        self,
+        C=1.0,
+        kernel="linear",
+        lambda_=1.0,
+        gamma_=0.0,
+        k_neighbour=5,
+        solver="osqp",
+        manifold_metric="cosine",
+        knn_mode="distance",
+        **kwargs,
+    ):
         """Adaptation Regularised Support Vector Machine
 
         Parameters
@@ -83,18 +95,18 @@ class ARSVM(SSLFramework):
         gamma_ : float, optional
             manifold regulisation param, by default 0.0
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 5
         solver : str, optional
             solver to solve quadprog, osqp or cvxopt, by default 'osqp'
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
+            The distance metric used to calculate the k-Neighbors for each
+            sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
+            returned matrix: ‘connectivity’ will return the connectivity
+            matrix with ones and zeros, and ‘distance’ will return the
             distances between neighbors according to the given metric.
         kwargs :
             kernel param
@@ -127,8 +139,7 @@ class ARSVM(SSLFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel,
-                                              filter_params=True, **self.kwargs)
+        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
 
         y_ = self._lb.fit_transform(y)
 
@@ -165,11 +176,11 @@ class ARSVM(SSLFramework):
         Returns
         -------
         array-like
-            decision scores, , shape (n_samples,) for binary classification, 
+            decision scores, , shape (n_samples,) for binary classification,
             (n_samples, n_class) for multi-class cases
         """
-        check_is_fitted(self, 'X')
-        check_is_fitted(self, 'y')
+        check_is_fitted(self, "X")
+        check_is_fitted(self, "y")
         # X_fit = self.X
         ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
 
@@ -189,7 +200,7 @@ class ARSVM(SSLFramework):
             predicted labels, , shape (n_samples, )
         """
         dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
+        if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
@@ -199,7 +210,7 @@ class ARSVM(SSLFramework):
     def fit_predict(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
             classification on samples in Xt.
-        
+
         Parameters
         ----------
         Xs : array-like
@@ -218,9 +229,17 @@ class ARSVM(SSLFramework):
 
 
 class ARRLS(SSLFramework):
-    def __init__(self, kernel='linear', lambda_=1.0, gamma_=0.0, sigma_=1.0, 
-                 k_neighbour=5, manifold_metric='cosine', knn_mode='distance', 
-                 **kwargs):
+    def __init__(
+        self,
+        kernel="linear",
+        lambda_=1.0,
+        gamma_=0.0,
+        sigma_=1.0,
+        k_neighbour=5,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        **kwargs,
+    ):
         """Adaptation Regularised Least Square
 
         Parameters
@@ -234,18 +253,18 @@ class ARRLS(SSLFramework):
         sigma_ : float, optional
             l2 regularisation param, by default 1.0
         k_neighbour : int, optional
-            number of nearest numbers for each sample in manifold regularisation, 
+            number of nearest numbers for each sample in manifold regularisation,
             by default 5
         manifold_metric : str, optional
-            The distance metric used to calculate the k-Neighbors for each 
-            sample point. The DistanceMetric class gives a list of available 
+            The distance metric used to calculate the k-Neighbors for each
+            sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of 
-            returned matrix: ‘connectivity’ will return the connectivity 
-            matrix with ones and zeros, and ‘distance’ will return the 
+            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
+            returned matrix: ‘connectivity’ will return the connectivity
+            matrix with ones and zeros, and ‘distance’ will return the
             distances between neighbors according to the given metric.
-        kwargs: 
+        kwargs:
             kernel param
         """
         self.kwargs = kwargs
@@ -261,7 +280,7 @@ class ARRLS(SSLFramework):
 
     def fit(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data.
-        
+
         Parameters
         ----------
         Xs : array-like
@@ -274,18 +293,15 @@ class ARRLS(SSLFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel,
-                                              filter_params=True, **self.kwargs)
+        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
         n = ker_x.shap[0]
         nl = y.shape[0]
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
-            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour,
-                               metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat),
-                        ker_x) + self.sigma_ * unit_mat
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), ker_x) + self.sigma_ * unit_mat
         else:
             Q_ = np.dot((J + self.lambda_ * M), ker_x) + self.sigma_ * unit_mat
 
@@ -299,10 +315,10 @@ class ARRLS(SSLFramework):
 
     def predict(self, X):
         """Perform classification on samples in X.
-        
+
         Parameters:
         ----------
-            X : array-like, 
+            X : array-like,
                 shape (n_samples, n_features)
         Returns
         -------
@@ -310,7 +326,7 @@ class ARRLS(SSLFramework):
             predicted labels, shape (n_samples)
         """
         dec = self.decision_function(X)
-        if self._lb.y_type_ == 'binary':
+        if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
@@ -322,15 +338,14 @@ class ARRLS(SSLFramework):
 
         Parameters
         ----------
-            X : array-like, 
+            X : array-like,
                 shape (n_samples, n_features)
         Returns
         -------
         array-like
             prediction scores, shape (n_samples)
         """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel,
-                                 filter_params=True, **self.kwargs)
+        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         return np.dot(ker_x, self.coef_)
 
     def fit_predict(self, Xs, ys, Xt=None, yt=None):
