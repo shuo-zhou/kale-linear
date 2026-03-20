@@ -1,4 +1,6 @@
+from ._artl import ARRLS, ARSVM
+from ._manifold_learn import LapRLS, LapSVM
+from ._sider import SIDeRLS, SIDeRSVM
 
-from ._manifold_learn import LapSVM, LapRLS
-from ._artl import ARSVM, ARRLS
-from ._sider import SIDeRSVM, SIDeRLS
+# from .sider import SIDeRSVM_
+# from .sider import SIDeRSVM, SIDeRLS

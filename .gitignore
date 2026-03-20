@@ -1,0 +1,24 @@
+*/**/__pycache__
+*/__pycache__
+*.iml
+*.json
+*.pt
+*.pth
+*.pyc
+*.zip
+*.xml
+
+.ipynb_checkpoints/
+build/
+data/
+dist/
+
+pydale/ten_alg/
+TPy_/
+TPy.egg-info/
+tests/test_data
+tests/estimator/tests
+tests/transformer/tests
+
+# Jupyter Notebook Checkpoints
+*-checkpoint.ipynb

@@ -1,7 +1,9 @@
-numpy
-scipy
-pandas
-scikit-learn
 cvxopt
+numpy
 osqp
+pandas
+pykale
+pytest
 pytorch
+scikit-learn
+scipy
