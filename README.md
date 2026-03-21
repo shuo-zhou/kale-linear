@@ -12,7 +12,7 @@ This package contains implementations of the following methods:
 - Estimators (learning classifiers):
   - Manifold Regularisation Learning Framework (LapSVM, LapRLS) [[Belkin et al., 2006]](http://www.jmlr.org/papers/v7/belkin06a.html).
   - Adaptation Regularisation Learning Framework (ARSVM, ARRLS) [[Long et al., 2014]](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=6550016).
-  - Side Information Independence Regularised Learning Framework (SIDeRSVM, SIDeRLS) [[Zhou et al, 2020]](https://aaai.org/ojs/index.php/AAAI/article/view/6179).
+  - Side Information Independence Regularised Learning Framework (CoIRSVM, CoIRLS) [[Zhou et al, 2020]](https://aaai.org/ojs/index.php/AAAI/article/view/6179).
 
 
 ### Dependencies
@@ -58,7 +58,7 @@ y_pred = clf.predict(Xt)
 
 Example 3: Using Side Information Dependence Regularisation Learning Framework
 ```
-From kalinear.estimator.sider import SIDeRSVM
+From kalinear.estimator import CoIRSVM
 
 ns = Xs.shape[0]
 nt = Xt.shape[0]
@@ -66,7 +66,7 @@ D = np.zeros((ns+nt, 2))  # Domain Covariates Matrix
 D[:ns, 0] = 1
 D[ns:, 1] = 1
 
-clf = SIDeRSVM()
+clf = CoIRSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys, D)
 y_pred = clf.predict(Xt)
 ```

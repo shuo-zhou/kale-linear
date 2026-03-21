@@ -85,7 +85,7 @@ class JDA(BaseEstimator, TransformerMixin):
 
         U = np.zeros(eig_vectors.shape)
         U[:, :] = eig_vectors[:, idx_sorted]
-        self.U = np.asarray(U, dtype=np.float)
+        self.U = np.asarray(U, dtype=np.float64)
         self.Xs = Xs
         self.Xt = Xt
 

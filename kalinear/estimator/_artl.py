@@ -9,7 +9,7 @@ from sklearn.utils.validation import check_is_fitted
 
 from ..utils import lap_norm, mmd_coef
 from ..utils.multiclass import score2pred
-from .base import SSLFramework
+from .base import BaseFramework
 
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
@@ -69,7 +69,7 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
     return X, y, ker_x, M, unit_mat
 
 
-class ARSVM(SSLFramework):
+class ARSVM(BaseFramework):
     def __init__(
         self,
         C=1.0,
@@ -228,7 +228,7 @@ class ARSVM(SSLFramework):
         return self.predict(self.X)
 
 
-class ARRLS(SSLFramework):
+class ARRLS(BaseFramework):
     def __init__(
         self,
         kernel="linear",
@@ -294,7 +294,7 @@ class ARRLS(SSLFramework):
             Target label, shape (ntl_samples, ), by default None
         """
         X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
-        n = ker_x.shap[0]
+        n = ker_x.shape[0]
         nl = y.shape[0]
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)

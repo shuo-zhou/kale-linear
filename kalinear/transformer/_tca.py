@@ -96,7 +96,7 @@ class TCA(BaseEstimator, TransformerMixin):
         eig_values, eig_vectors = eig(obj, st)
         idx_sorted = eig_values.argsort()
 
-        self.U = np.asarray(eig_vectors[:, idx_sorted], dtype=np.float)
+        self.U = np.asarray(eig_vectors[:, idx_sorted], dtype=np.float64)
         self.Xs = Xs
         self.Xt = Xt
 

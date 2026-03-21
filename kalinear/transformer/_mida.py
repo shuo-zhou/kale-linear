@@ -86,7 +86,7 @@ class MIDA(BaseEstimator, TransformerMixin):
         idx_sorted = eig_values.argsort()
 
         self.U = eig_vectors[:, idx_sorted]
-        self.U = np.asarray(self.U, dtype=np.float)
+        self.U = np.asarray(self.U, dtype=np.float64)
         #        self.components_ = np.dot(X.T, U)
         #        self.components_ = self.components_.T
 

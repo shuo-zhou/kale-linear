@@ -15,10 +15,10 @@ from sklearn.utils.validation import check_is_fitted
 # from cvxpy.error import SolverError
 from ..utils import base_init, lap_norm
 from ..utils.multiclass import score2pred
-from .base import SSLFramework
+from .base import BaseFramework
 
 
-class LapSVM(SSLFramework):
+class LapSVM(BaseFramework):
     def __init__(
         self,
         C=1.0,
@@ -168,7 +168,7 @@ class LapSVM(SSLFramework):
         return self.predict(X)
 
 
-class LapRLS(SSLFramework):
+class LapRLS(BaseFramework):
     def __init__(
         self,
         kernel="linear",

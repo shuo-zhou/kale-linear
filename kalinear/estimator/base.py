@@ -6,169 +6,123 @@ import scipy.sparse as sparse
 from cvxopt import matrix, solvers
 from numpy.linalg import inv, multi_dot
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.exceptions import NotFittedError
+from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.preprocessing import LabelBinarizer
 
 
-class SSLFramework(BaseEstimator, ClassifierMixin):
-    """Semi-supervised Learning Framework"""
+class BaseFramework(BaseEstimator, ClassifierMixin):
+    """Semi-supervised learning framework."""
+
+    def __init__(self, kernel="linear", k_neighbour=5, manifold_metric="cosine", knn_mode="distance", **kwargs):
+        super().__init__()
+        self.kernel = kernel
+        self.k_neighbour = k_neighbour
+        self.manifold_metric = manifold_metric
+        self.knn_mode = knn_mode
+        self.coef_ = None
+        self.support_ = None
+        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
+        self.kwargs = kwargs
+        self.x = None
+        self.X = None
+        self.y = None
 
     @classmethod
-    def _solve_semi_dual(cls, K, y, Q_, C, solver="osqp"):
-        """[summary]
-
-        Parameters
-        ----------
-        K : [type]
-            [description]
-        y : [type]
-            [description]
-        Q_ : [type]
-            [description]
-        C : [type]
-            [description]
-        solver : str, optional
-            [description], by default 'osqp'
-
-        Returns
-        -------
-        [type]
-            [description]
-        """
+    def _solve_semi_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
         if len(y.shape) == 1:
-            coef_, support_ = cls._semi_binary_dual(K, y, Q_, C, solver)
+            coef_, support_ = cls._semi_binary_dual(krnl_x, y, obj_core, C, solver)
             support_ = [support_]
         else:
-            coef_ = []
+            coef_ = np.zeros((krnl_x.shape[1], y.shape[1]))
             support_ = []
             for i in range(y.shape[1]):
-                coef_i, support_i = cls._semi_binary_dual(K, y[:, i], Q_, C, solver)
-                coef_.append(coef_i.reshape(-1, 1))
+                coef_i, support_i = cls._semi_binary_dual(krnl_x, y[:, i], obj_core, C, solver)
+                coef_[:, i] = coef_i
                 support_.append(support_i)
-
-            coef_ = np.concatenate(coef_, axis=1)
 
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, K, y_, Q_, C, solver="osqp"):
-        """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
-
-        Parameters
-        ----------
-        K : [type]
-            [description]
-        y_ : [type]
-            [description]
-        Q_ : [type]
-            [description]
-        C : [type]
-            [description]
-        solver : str, optional
-            [description], by default 'osqp'
-
-        Returns
-        -------
-        [type]
-            [description]
-        """
-        nl = y_.shape[0]
-        n = K.shape[0]
-        J = np.zeros((nl, n))
-        J[:nl, :nl] = np.eye(nl)
-        Q_inv = inv(Q_)
-        Y = np.diag(y_.reshape(-1))
-        Q = multi_dot([Y, J, K, Q_inv, J.T, Y])
-        Q = Q.astype("float32")
-        alpha = cls._quadprog(Q, y_, C, solver)
-        coef_ = multi_dot([Q_inv, J.T, Y, alpha])
+    def _semi_binary_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
+        n_labeled = y.shape[0]
+        n = krnl_x.shape[0]
+        J = np.zeros((n_labeled, n))
+        J[:n_labeled, :n_labeled] = np.eye(n_labeled)
+        obj_inv = inv(obj_core)
+        y_diag = np.diag(y.reshape(-1))
+        Q = multi_dot([y_diag, J, krnl_x, obj_inv, J.T, y_diag]).astype("float32")
+        alpha = cls._quadprog(Q, y, C, solver)
+        coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
         return coef_, support_
 
     @classmethod
-    def _quadprog(cls, Q, y, C, solver="osqp"):
-        """solve min_x x^TPx + q^Tx, s.t. Gx<=h, Ax=b
-
-        Parameters
-        ----------
-        Q : [type]
-            [description]
-        y : [type]
-            [description]
-        C : [type]
-            [description]
-        solver : str, optional
-            [description], by default 'osqp'
-
-        Returns
-        -------
-        [type]
-            [description]
-        """
-        # dual
-        nl = y.shape[0]
-        q = -1 * np.ones((nl, 1))
+    def _quadprog(cls, P, y, C, solver="osqp"):
+        n_labeled = y.shape[0]
+        q = -1 * np.ones(n_labeled)
+        upper_bound = C / n_labeled
 
         if solver == "cvxopt":
-            G = np.zeros((2 * nl, nl))
-            G[:nl, :] = -1 * np.eye(nl)
-            G[nl:, :] = np.eye(nl)
-            h = np.zeros((2 * nl, 1))
-            h[nl:, :] = C / nl
+            G = np.zeros((2 * n_labeled, n_labeled))
+            G[:n_labeled, :] = -1 * np.eye(n_labeled)
+            G[n_labeled:, :] = np.eye(n_labeled)
+            h = np.zeros((2 * n_labeled, 1))
+            h[n_labeled:, :] = upper_bound
 
-            # convert numpy matrix to cvxopt matrix
-            P = matrix(Q)
-            q = matrix(q)
+            P = matrix(P.astype(np.float64))
+            q = matrix(q.reshape(-1, 1))
             G = matrix(G)
             h = matrix(h)
-            A = matrix(y.reshape(1, -1).astype("float64"))
-            b = matrix(np.zeros(1).astype("float64"))
+            A = matrix(y.reshape(1, -1).astype(np.float64))
+            b = matrix(np.zeros(1).astype(np.float64))
 
             solvers.options["show_progress"] = False
             sol = solvers.qp(P, q, G, h, A, b)
-
-            alpha = np.array(sol["x"]).reshape(nl)
-
+            beta = np.array(sol["x"]).reshape(n_labeled)
         elif solver == "osqp":
             warnings.simplefilter("ignore", sparse.SparseEfficiencyWarning)
-            P = sparse.csc_matrix((nl, nl))
-            P[:nl, :nl] = Q[:nl, :nl]
-            G = sparse.vstack([sparse.eye(nl), y.reshape(1, -1)]).tocsc()
-            l_ = np.zeros((nl + 1, 1))
-            u = np.zeros(l_.shape)
-            u[:nl, 0] = C
+            P_sparse = sparse.csc_matrix(P)
+            G = sparse.vstack([sparse.eye(n_labeled), y.reshape(1, -1)]).tocsc()
+            l_ = np.zeros(n_labeled + 1)
+            u = np.zeros(n_labeled + 1)
+            u[:n_labeled] = upper_bound
 
             prob = osqp.OSQP()
-            prob.setup(P, q, G, l_, u, verbose=False)
-            res = prob.solve()
-            alpha = res.x
-
+            prob.setup(P_sparse, q, G, l_, u, verbose=False)
+            beta = prob.solve().x
         else:
             raise ValueError("Invalid QP solver")
 
-        return alpha
+        return beta
 
     @classmethod
     def _solve_semi_ls(cls, Q, y):
-        """[summary]
-
-        Parameters
-        ----------
-        Q : [type]
-            [description]
-        y : [type]
-            [description]
-
-        Returns
-        -------
-        [type]
-            [description]
-        """
         n = Q.shape[0]
-        nl = y.shape[0]
+        n_labeled = y.shape[0]
         Q_inv = inv(Q)
         if len(y.shape) == 1:
             y_ = np.zeros(n)
-            y_[:nl] = y[:]
+            y_[:n_labeled] = y
         else:
             y_ = np.zeros((n, y.shape[1]))
-            y_[:nl, :] = y[:, :]
+            y_[:n_labeled, :] = y
         return np.dot(Q_inv, y_)
+
+    def _get_fit_data(self):
+        if getattr(self, "X", None) is not None:
+            return self.X
+        if getattr(self, "x", None) is not None:
+            return self.x
+        raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
+
+    def decision_function(self, x):
+        krnl_x = pairwise_kernels(x, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs)
+        return np.dot(krnl_x, self.coef_)
+
+    def predict(self, x):
+        scores = self.decision_function(x)
+        return self._lb.inverse_transform(scores)
+
+
+__all__ = ["BaseFramework"]

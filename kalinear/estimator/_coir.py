@@ -18,10 +18,10 @@ from ..utils import base_init, lap_norm
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
 from ..utils.multiclass import score2pred
-from .base import SSLFramework
+from .base import BaseFramework
 
 
-class SIDeRSVM(SSLFramework):
+class CoIRSVM(BaseFramework):
     def __init__(
         self,
         C=1.0,
@@ -34,7 +34,7 @@ class SIDeRSVM(SSLFramework):
         solver="osqp",
         **kwargs,
     ):
-        """Side Information Dependence Regularised Support Vector Machine
+        """Covariate Independence Regularised Support Vector Machine
 
         Parameters
         ----------
@@ -43,7 +43,7 @@ class SIDeRSVM(SSLFramework):
         kernel : str, optional
             'rbf' | 'linear' | 'poly', by default 'linear'
         lambda_ : float, optional
-            param for side information dependence regularisation, by default 1
+            param for covariate (side information) independence regularisation, by default 1
         mu : float, optional
             param for manifold regularisation, by default 0
         k_neighbour : int, optional
@@ -54,9 +54,9 @@ class SIDeRSVM(SSLFramework):
             sample point. The DistanceMetric class gives a list of available
             metrics. By default 'cosine'.
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
-            returned matrix: ‘connectivity’ will return the connectivity
-            matrix with ones and zeros, and ‘distance’ will return the
+            {'connectivity', 'distance'}, by default 'distance'. Type of
+            returned matrix: 'connectivity' will return the connectivity
+            matrix with ones and zeros, and 'distance' will return the
             distances between neighbors according to the given metric.
         solver : str, optional
             quadratic programming solver, [cvxopt, osqp], by default 'osqp'
@@ -199,7 +199,7 @@ class SIDeRSVM(SSLFramework):
         return self.predict(X)
 
 
-class SIDeRLS(SSLFramework):
+class CoIRLS(BaseFramework):
     def __init__(
         self,
         sigma_=1.0,
@@ -212,14 +212,14 @@ class SIDeRLS(SSLFramework):
         class_weight=None,
         **kwargs,
     ):
-        """Side Information Dependence Regularised Least Square
+        """Covariate Independence Regularised Least Square
 
         Parameters
         ----------
         sigma_ : float, optional
             param for model complexity (l2 norm), by default 1.0
         lambda_ : float, optional
-            param for side information dependence regularisation, by default 1.0
+            param for covariate (side information) independence regularisation, by default 1.0
         mu : float, optional
             param for manifold regularisation, by default 0.0
         kernel : str, optional
@@ -228,9 +228,9 @@ class SIDeRLS(SSLFramework):
             number of nearest numbers for each sample in manifold regularisation,
             by default 3
         knn_mode : str, optional
-            {‘connectivity’, ‘distance’}, by default 'distance'. Type of
-            returned matrix: ‘connectivity’ will return the connectivity
-            matrix with ones and zeros, and ‘distance’ will return the
+            {'connectivity', 'distance'}, by default 'distance'. Type of
+            returned matrix: 'connectivity' will return the connectivity
+            matrix with ones and zeros, and 'distance' will return the
             distances between neighbors according to the given metric.
         manifold_metric : str, optional
             The distance metric used to calculate the k-Neighbors for each
