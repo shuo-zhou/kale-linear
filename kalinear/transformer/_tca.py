@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
 # from sklearn.utils.validation import check_is_fitted
-from ..utils import base_init, lap_norm, mmd_coef
+from ..utils import base_init, infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
 
 
 class TCA(BaseEstimator, TransformerMixin):
@@ -62,6 +62,11 @@ class TCA(BaseEstimator, TransformerMixin):
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None
         """
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
         if type(Xt) is np.ndarray:
             X = np.vstack((Xs, Xt))
             ns = Xs.shape[0]
@@ -116,10 +121,13 @@ class TCA(BaseEstimator, TransformerMixin):
         """
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
         X_fit = np.vstack((self.Xs, self.Xt))
-        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+        ker_x = pairwise_kernels(X_np, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        return np.dot(ker_x, self.U[:, : self.n_components])
+        X_transformed = np.dot(ker_x, self.U[:, : self.n_components])
+        return to_backend(X_transformed, backend, reference=X)
 
     def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """

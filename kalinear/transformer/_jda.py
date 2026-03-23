@@ -6,7 +6,7 @@ from scipy.linalg import eig
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 
-from ..utils import base_init, mmd_coef
+from ..utils import base_init, infer_backend, mmd_coef, to_backend, to_numpy
 
 # from sklearn.preprocessing import StandardScaler
 # =============================================================================
@@ -58,6 +58,11 @@ class JDA(BaseEstimator, TransformerMixin):
         yt : array-like, optional
             Target domain labels, shape (nt_samples,), by default None.
         """
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
         if type(Xt) is np.ndarray:
             X = np.vstack((Xs, Xt))
             ns = Xs.shape[0]
@@ -106,10 +111,13 @@ class JDA(BaseEstimator, TransformerMixin):
         # X = self.scaler.transform(X)
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
         X_fit = np.vstack((self.Xs, self.Xt))
-        ker_x = pairwise_kernels(X, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+        ker_x = pairwise_kernels(X_np, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        return np.dot(ker_x, self.U[:, : self.n_components])
+        X_transformed = np.dot(ker_x, self.U[:, : self.n_components])
+        return to_backend(X_transformed, backend, reference=X)
 
     def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """

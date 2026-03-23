@@ -13,7 +13,7 @@ from sklearn.utils.validation import check_is_fitted
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils import base_init, lap_norm
+from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
 from ..utils.multiclass import score2pred
 from .base import BaseFramework
 
@@ -82,6 +82,9 @@ class LapSVM(BaseFramework):
         self
             [description]
         """
+        self.backend_ = infer_backend(X, y)
+        X = to_numpy(X)
+        y = to_numpy(y)
         ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if self.gamma_ == 0:
             Q_ = ctr_mat
@@ -123,9 +126,11 @@ class LapSVM(BaseFramework):
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")
         # X_fit = self.X
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -140,13 +145,15 @@ class LapSVM(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def fit_predict(self, X, y):
         """Fit the model according to the given training data and then perform
@@ -229,6 +236,9 @@ class LapRLS(BaseFramework):
         self
             [description]
         """
+        self.backend_ = infer_backend(X, y)
+        X = to_numpy(X)
+        y = to_numpy(y)
         nl = y.shape[0]
         ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
 
@@ -262,13 +272,15 @@ class LapRLS(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def decision_function(self, X):
         """Evaluates the decision function for the samples in X
@@ -284,8 +296,11 @@ class LapRLS(BaseFramework):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_class) for multi-class cases
         """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)
 
     def fit_predict(self, X, y):
         """Fit the model according to the given training data and then perform

@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils import base_init
+from ..utils import base_init, infer_backend, to_backend, to_numpy
 
 
 class MIDA(BaseEstimator, TransformerMixin):
@@ -62,6 +62,10 @@ class MIDA(BaseEstimator, TransformerMixin):
             Unsupervised MIDA is performed if ys and yt are not given.
             Semi-supervised MIDA is performed is ys and yt are given.
         """
+        self.backend_ = infer_backend(X, y, co_variates)
+        X = to_numpy(X)
+        y = to_numpy(y)
+        co_variates = to_numpy(co_variates)
         if self.aug and type(co_variates) is np.ndarray:
             X = np.concatenate((X, co_variates), axis=1)
         ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
@@ -107,11 +111,16 @@ class MIDA(BaseEstimator, TransformerMixin):
             transformed data
         """
         check_is_fitted(self, "X")
+        backend = infer_backend(X, co_variates)
+        X_input = X
+        X = to_numpy(X)
+        co_variates = to_numpy(co_variates)
         if self.aug and type(co_variates) is np.ndarray:
             X = np.concatenate((X, co_variates), axis=1)
         ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        return np.dot(ker_x, self.U[:, : self.n_components])
+        X_transformed = np.dot(ker_x, self.U[:, : self.n_components])
+        return to_backend(X_transformed, backend, reference=X_input)
 
     def fit_transform(self, X, y=None, co_variates=None):
         """

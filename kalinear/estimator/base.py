@@ -10,11 +10,22 @@ from sklearn.exceptions import NotFittedError
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
+from ..utils import infer_backend, to_backend, to_numpy
+
 
 class BaseFramework(BaseEstimator, ClassifierMixin):
     """Semi-supervised learning framework."""
 
-    def __init__(self, kernel="linear", k_neighbour=5, manifold_metric="cosine", knn_mode="distance", **kwargs):
+    def __init__(
+        self,
+        kernel="linear",
+        k_neighbour=5,
+        manifold_metric="cosine",
+        knn_mode="distance",
+        pos_label=1,
+        neg_label=-1,
+        **kwargs,
+    ):
         super().__init__()
         self.kernel = kernel
         self.k_neighbour = k_neighbour
@@ -22,36 +33,42 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         self.knn_mode = knn_mode
         self.coef_ = None
         self.support_ = None
-        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
+        self._lb = LabelBinarizer(pos_label=pos_label, neg_label=neg_label)
         self.kwargs = kwargs
-        self.x = None
+        self.backend_ = "numpy"
         self.X = None
         self.y = None
 
     @classmethod
-    def _solve_semi_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
+    def _solve_semi_dual(cls, kernel_x, y, obj_core, C, solver="osqp"):
+        kernel_x = to_numpy(kernel_x)
+        y = to_numpy(y)
+        obj_core = to_numpy(obj_core)
         if len(y.shape) == 1:
-            coef_, support_ = cls._semi_binary_dual(krnl_x, y, obj_core, C, solver)
+            coef_, support_ = cls._semi_binary_dual(kernel_x, y, obj_core, C, solver)
             support_ = [support_]
         else:
-            coef_ = np.zeros((krnl_x.shape[1], y.shape[1]))
+            coef_ = np.zeros((kernel_x.shape[1], y.shape[1]))
             support_ = []
             for i in range(y.shape[1]):
-                coef_i, support_i = cls._semi_binary_dual(krnl_x, y[:, i], obj_core, C, solver)
+                coef_i, support_i = cls._semi_binary_dual(kernel_x, y[:, i], obj_core, C, solver)
                 coef_[:, i] = coef_i
                 support_.append(support_i)
 
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, krnl_x, y, obj_core, C, solver="osqp"):
+    def _semi_binary_dual(cls, kernel_x, y, obj_core, C, solver="osqp"):
+        kernel_x = to_numpy(kernel_x)
+        y = to_numpy(y)
+        obj_core = to_numpy(obj_core)
         n_labeled = y.shape[0]
-        n = krnl_x.shape[0]
+        n = kernel_x.shape[0]
         J = np.zeros((n_labeled, n))
         J[:n_labeled, :n_labeled] = np.eye(n_labeled)
         obj_inv = inv(obj_core)
         y_diag = np.diag(y.reshape(-1))
-        Q = multi_dot([y_diag, J, krnl_x, obj_inv, J.T, y_diag]).astype("float32")
+        Q = multi_dot([y_diag, J, kernel_x, obj_inv, J.T, y_diag]).astype("float32")
         alpha = cls._quadprog(Q, y, C, solver)
         coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
@@ -59,6 +76,8 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
 
     @classmethod
     def _quadprog(cls, P, y, C, solver="osqp"):
+        P = to_numpy(P)
+        y = to_numpy(y)
         n_labeled = y.shape[0]
         q = -1 * np.ones(n_labeled)
         upper_bound = C / n_labeled
@@ -98,6 +117,8 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
 
     @classmethod
     def _solve_semi_ls(cls, Q, y):
+        Q = to_numpy(Q)
+        y = to_numpy(y)
         n = Q.shape[0]
         n_labeled = y.shape[0]
         Q_inv = inv(Q)
@@ -111,18 +132,21 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
 
     def _get_fit_data(self):
         if getattr(self, "X", None) is not None:
-            return self.X
-        if getattr(self, "x", None) is not None:
-            return self.x
+            return to_numpy(self.X)
         raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
 
-    def decision_function(self, x):
-        krnl_x = pairwise_kernels(x, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(krnl_x, self.coef_)
+    def decision_function(self, X):
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        kernel_x = pairwise_kernels(X_np, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(kernel_x, to_numpy(self.coef_))
+        return to_backend(scores, backend, reference=X)
 
-    def predict(self, x):
-        scores = self.decision_function(x)
-        return self._lb.inverse_transform(scores)
+    def predict(self, X):
+        backend = infer_backend(X)
+        scores = to_numpy(self.decision_function(X))
+        y_pred = self._lb.inverse_transform(scores)
+        return to_backend(y_pred, backend, reference=X)
 
 
 __all__ = ["BaseFramework"]

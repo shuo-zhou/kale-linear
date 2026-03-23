@@ -13,7 +13,7 @@ from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
-from ..utils import base_init, lap_norm
+from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
@@ -96,6 +96,10 @@ class CoIRSVM(BaseFramework):
         self
             [description]
         """
+        self.backend_ = infer_backend(X, y, co_variates)
+        X = to_numpy(X)
+        y = to_numpy(y)
+        co_variates = to_numpy(co_variates)
         ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
         ker_c = np.dot(co_variates, co_variates.T)
         y_ = self._lb.fit_transform(y)
@@ -154,8 +158,11 @@ class CoIRSVM(BaseFramework):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_class) for multi-class cases
         """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -170,13 +177,15 @@ class CoIRSVM(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def fit_predict(self, X, y, co_variates):
         """[summary]
@@ -273,6 +282,10 @@ class CoIRLS(BaseFramework):
         self
             [description]
         """
+        self.backend_ = infer_backend(X, y, co_variates)
+        X = to_numpy(X)
+        y = to_numpy(y)
+        co_variates = to_numpy(co_variates)
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
         ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
@@ -319,9 +332,11 @@ class CoIRLS(BaseFramework):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_class) for multi-class cases
         """
-
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -336,13 +351,15 @@ class CoIRLS(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def fit_predict(self, X, y, co_variates=None):
         """Fit the model according to the given training data and then perform

@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils import lap_norm, mmd_coef
+from ..utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
 from ..utils.multiclass import score2pred
 from .base import BaseFramework
 
@@ -48,6 +48,10 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
 
     """
 
+    Xs = to_numpy(Xs)
+    ys = to_numpy(ys)
+    Xt = to_numpy(Xt)
+    yt = to_numpy(yt)
     if type(Xt) is np.ndarray:
         X = np.concatenate([Xs, Xt], axis=0)
         ns = Xs.shape[0]
@@ -139,6 +143,11 @@ class ARSVM(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
         X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
 
         y_ = self._lb.fit_transform(y)
@@ -182,9 +191,11 @@ class ARSVM(BaseFramework):
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")
         # X_fit = self.X
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-
-        return np.dot(ker_x, self.coef_)  # +self.intercept_
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -199,13 +210,15 @@ class ARSVM(BaseFramework):
         array-like
             predicted labels, , shape (n_samples, )
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def fit_predict(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
@@ -223,9 +236,10 @@ class ARSVM(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
+        backend = infer_backend(Xs, ys, Xt, yt)
         self.fit(Xs, ys, Xt, yt)
-
-        return self.predict(self.X)
+        y_pred = self.predict(self.X)
+        return to_backend(to_numpy(y_pred), backend, reference=Xs if backend == "torch" else None)
 
 
 class ARRLS(BaseFramework):
@@ -293,6 +307,11 @@ class ARRLS(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
         X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
         n = ker_x.shape[0]
         nl = y.shape[0]
@@ -325,13 +344,15 @@ class ARRLS(BaseFramework):
         array-like
             predicted labels, shape (n_samples)
         """
-        dec = self.decision_function(X)
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
         if self._lb.y_type_ == "binary":
             y_pred_ = np.sign(dec).reshape(-1, 1)
         else:
             y_pred_ = score2pred(dec)
 
-        return self._lb.inverse_transform(y_pred_)
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
 
     def decision_function(self, X):
         """Evaluates the decision function for the samples in X.
@@ -345,8 +366,11 @@ class ARRLS(BaseFramework):
         array-like
             prediction scores, shape (n_samples)
         """
-        ker_x = pairwise_kernels(X, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        return np.dot(ker_x, self.coef_)
+        backend = infer_backend(X)
+        X_np = to_numpy(X)
+        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(ker_x, self.coef_)
+        return to_backend(scores, backend, reference=X)
 
     def fit_predict(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
@@ -364,6 +388,7 @@ class ARRLS(BaseFramework):
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
+        backend = infer_backend(Xs, ys, Xt, yt)
         self.fit(Xs, ys, Xt, yt)
-
-        return self.predict(Xt)
+        y_pred = self.predict(Xt)
+        return to_backend(to_numpy(y_pred), backend, reference=Xt if Xt is not None else Xs)

@@ -99,3 +99,23 @@ def test_manifold_estimators_predict_labels(estimator_cls, office_test_data):
     assert decision.shape[0] == len(tgt_idx[0])
     assert y_pred.shape == y[tgt_idx].shape
     assert 0 <= acc <= 1
+
+
+def test_laprls_supports_torch_backend(office_test_data):
+    torch = pytest.importorskip("torch")
+
+    x, y, tgt_idx, src_idx, x_train, _, y_train = _split_source_target(office_test_data)
+    clf = estimator.LapRLS()
+
+    X_train = torch.tensor(x_train, dtype=torch.float32)
+    y_source = torch.tensor(y_train, dtype=torch.int64)
+    X_target = torch.tensor(x[tgt_idx], dtype=torch.float32)
+
+    clf.fit(X_train, y_source)
+    decision = clf.decision_function(X_target)
+    y_pred = clf.predict(X_target)
+
+    assert isinstance(decision, torch.Tensor)
+    assert isinstance(y_pred, torch.Tensor)
+    assert decision.shape[0] == len(tgt_idx[0])
+    assert y_pred.shape[0] == len(tgt_idx[0])
