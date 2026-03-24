@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from sklearn.exceptions import NotFittedError
 
-from kalinear.estimator.base import BaseFramework
+from kalelinear.estimator.base import BaseFramework
 
 
 def test_base_framework_decision_function_uses_X_fit_data():

@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from kalinear.utils import base_init, lap_norm, mmd_coef
-from kalinear.utils.multiclass import score2pred
+from kalelinear.utils import base_init, lap_norm, mmd_coef
+from kalelinear.utils.multiclass import score2pred
 
 
 @pytest.fixture

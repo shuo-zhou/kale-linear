@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from sklearn.metrics import accuracy_score
 
-import kalinear.estimator as estimator
+import kalelinear.estimator as estimator
 
 
 @pytest.fixture

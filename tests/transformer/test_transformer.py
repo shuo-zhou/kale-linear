@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from kalinear.transformer import JDA, MIDA, TCA
+from kalelinear.transformer import JDA, MIDA, TCA
 
 
 @pytest.fixture

@@ -72,14 +72,14 @@ def read(*names, **kwargs):
 
 
 setup(
-    name="kalinear",
+    name="kalelinear",
     version="0.1.0a1",
     description="A Transfer Learning Python package",
     url="https://github.com/sz144/TPy",
     author="Shuo Zhou",
     author_email="szhou20@sheffield.ac.uk",
     license="MIT License",
-    packages=["kalinear"],
+    packages=["kalelinear"],
     install_requires=["numpy", "scipy", "pandas", "scikit-learn", "cvxopt", "osqp"],
     classifiers=[
         "Programming Language :: Python :: 3",

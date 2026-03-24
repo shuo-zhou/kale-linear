@@ -1,5 +1,5 @@
 """
-kalinear.
+kalelinear.
 
 A Transfer Learning Python package
 """

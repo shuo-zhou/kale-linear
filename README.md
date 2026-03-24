@@ -29,7 +29,7 @@ This package contains implementations of the following methods:
 
 ##### Learning low-dimensional embedding for input data `X`
 ```
-From kalinear.transformer.tca import TCA
+From kalelinear.transformer.tca import TCA
 
 transformer = TCA(n_components=2)
 X_transformed = transformer.fit_transform(X)
@@ -40,7 +40,7 @@ X_transformed = transformer.fit_transform(X)
 Example 1: Using Manifold Regularisation Learning Framework
 ```
 import numpy as np
-From kalinear.estimator.manifold_learn import LapSVM
+From kalelinear.estimator.manifold_learn import LapSVM
 
 clf = LapSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys)
@@ -49,7 +49,7 @@ y_pred = clf.predict(Xt)
 
 Example 2: Using Adaptation Regularisation Learning Framework
 ```
-From kalinear.estimator.artl import ARSVM
+From kalelinear.estimator.artl import ARSVM
 
 clf = ARSVM()
 clf.fit(Xs, ys, Xt)
@@ -58,7 +58,7 @@ y_pred = clf.predict(Xt)
 
 Example 3: Using Side Information Dependence Regularisation Learning Framework
 ```
-From kalinear.estimator import CoIRSVM
+From kalelinear.estimator import CoIRSVM
 
 ns = Xs.shape[0]
 nt = Xt.shape[0]
