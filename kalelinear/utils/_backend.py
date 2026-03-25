@@ -30,7 +30,7 @@ def to_backend(value, backend, reference=None):
         return None
     if backend == "torch":
         if torch is None:
-            raise ImportError("Torch backend requested but torch is not installed.")
+            raise ImportError("Torch tensor interoperability requested but torch is not installed.")
         device = reference.device if is_torch_tensor(reference) else None
         return torch.as_tensor(value, device=device)
     return np.asarray(value)

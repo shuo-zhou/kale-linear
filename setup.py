@@ -8,12 +8,9 @@ from setuptools import setup
 # Dependencies with options for different user needs. If updating this, you may need to update docs/requirements.txt too.
 # If option names are changed, you need to update the installation guide at docs/source/installation.md respectively.
 # Not all have a min-version specified, which is not uncommon. Specify when known or necessary (e.g. errors).
-# The recommended practice is to install PyTorch from the official website to match the hardware first.
-# To work on graphs, install torch-geometric following the official instructions at https://github.com/pyg-team/pytorch_geometric#installation
 
-# Key reference followed: https://github.com/pyg-team/pytorch_geometric/blob/master/setup.py
 
-# Core dependencies frequently used in the Kalinear API
+# Core dependencies frequently used in the kalelinear API
 install_requires = [
     "cvxopt",  # sure
     "numpy>=1.18.0",  # sure
@@ -23,16 +20,18 @@ install_requires = [
     "scipy>=1.5.4",  # in factorization API only
 ]
 
+# Optional dependency for tensor input/output interoperability.
+torch_requires = [
+    "torch",
+]
+
 # Dependencies for all examples and tutorials
 example_requires = [
     "ipykernel",
     "ipython",
     "matplotlib<=3.5.2",
     "nilearn",
-    "Pillow",
-    "PyTDC",
     "seaborn",
-    "torchsummary>=1.5.0",
     "yacs>=0.1.7",
 ]
 
@@ -74,13 +73,18 @@ def read(*names, **kwargs):
 setup(
     name="kalelinear",
     version="0.1.0a1",
-    description="A Transfer Learning Python package",
-    url="https://github.com/sz144/TPy",
+    description="Non-deep knowledge-aware machine learning from multiple sources/views in Python",
+    url="https://github.com/pykale/kale-linear",
     author="Shuo Zhou",
-    author_email="szhou20@sheffield.ac.uk",
+    author_email="shuo.zhou@sheffield.ac.uk",
     license="MIT License",
     packages=["kalelinear"],
-    install_requires=["numpy", "scipy", "pandas", "scikit-learn", "cvxopt", "osqp"],
+    install_requires=install_requires,
+    extras_require={
+        "torch": torch_requires,
+        "full": full_requires + torch_requires,
+        "dev": dev_requires + torch_requires,
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "Development Status :: 3 - Alpha",
