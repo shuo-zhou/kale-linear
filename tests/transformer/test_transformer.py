@@ -24,7 +24,7 @@ def domain_adaptation_data():
         ]
     )
     yt = np.array([0, 0, 1, 1])
-    co_variates = np.array(
+    covariates = np.array(
         [
             [1.0, 0.0],
             [1.0, 0.0],
@@ -36,7 +36,7 @@ def domain_adaptation_data():
             [1.0, 0.0],
         ]
     )
-    return xs, ys, xt, yt, co_variates
+    return xs, ys, xt, yt, covariates
 
 
 @pytest.mark.parametrize("transformer_cls", [TCA, JDA])
@@ -53,12 +53,12 @@ def test_domain_transformers_fit_transform_shapes(transformer_cls, domain_adapta
 
 
 def test_mida_fit_transform_shapes_with_covariates(domain_adaptation_data):
-    xs, ys, xt, yt, co_variates = domain_adaptation_data
+    xs, ys, xt, yt, covariates = domain_adaptation_data
     x = np.vstack((xs, xt))
     y = np.concatenate((ys, yt))
     transformer = MIDA(n_components=2)
 
-    x_transformed = transformer.fit_transform(x, y=y, co_variates=co_variates)
+    x_transformed = transformer.fit_transform(x, y=y, covariates=covariates)
 
     assert x_transformed.shape == (x.shape[0], 2)
     assert np.isfinite(x_transformed).all()
@@ -73,11 +73,11 @@ def test_mida_transform_requires_fit(domain_adaptation_data):
 
 
 def test_transformers_store_training_projection(domain_adaptation_data):
-    xs, ys, xt, yt, co_variates = domain_adaptation_data
+    xs, ys, xt, yt, covariates = domain_adaptation_data
 
     tca = TCA(n_components=2).fit(xs, ys=ys, Xt=xt, yt=yt)
     jda = JDA(n_components=2).fit(xs, ys=ys, Xt=xt, yt=yt)
-    mida = MIDA(n_components=2).fit(np.vstack((xs, xt)), y=np.concatenate((ys, yt)), co_variates=co_variates)
+    mida = MIDA(n_components=2).fit(np.vstack((xs, xt)), y=np.concatenate((ys, yt)), covariates=covariates)
 
     assert tca.U.shape[0] == xs.shape[0] + xt.shape[0]
     assert jda.U.shape[0] == xs.shape[0] + xt.shape[0]
