@@ -268,40 +268,65 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 
 
 class MIDA(BaseKernelDomainAdapter):
-    """Maximum Independent Domain Adaptation (MIDA).
-    A kernel-based domain adaptation method that uses removes the effect of
-    factors/covariates from the data by learning a feature space derived from maximizing
-    Hilbert-Schmidt independence criterion (HSIC).
+    """Maximum Independence Domain Adaptation (MIDA).
+
+    MIDA learns a factor-invariant feature space by maximizing the Hilbert-Schmidt
+    independence criterion (HSIC) with respect to domain/group covariates.
 
     To prevent label leakage, please set the label for the target indices to -1.
 
-    Args:
-        num_components (int, optional): Number of components to keep. If None, all components are kept.
-        mu (float, optional): L2 kernel regularization coefficient. Default is 1.0.
-        eta (float, optional): Class-dependency regularization coefficient. Default is 1.0.
-        ignore_y (bool, optional): Whether to ignore the target variable `y` during fitting. Default is False.
-        augment (str, optional): Whether to augment the input data with factors. Can be "pre" (prepend factors),
-            "post" (append factors), or None (no augmentation). Defaults to None.
-        kernel (str, optional): Kernel type to be used. Default is 'linear'.
-        gamma (float, optional): Kernel coefficient for 'rbf', 'poly', and 'sigmoid' kernels. Default is None.
-        degree (int, optional): Degree of the polynomial kernel. Default is 3.
-        coef0 (float, optional): Independent term in the polynomial and sigmoid kernels. Default is 1.
-        kernel_params (dict, optional): Additional kernel parameters. Default is None.
-        alpha (float, optional): Regularization parameter. Default is 1.0.
-        fit_inverse_transform (bool, optional): Whether to fit the inverse transform. Default is False.
-        eigen_solver (str, optional): Eigendecomposition solver to use. Default is 'auto'.
-        tol (float, optional): Tolerance for convergence. Default is 0.
-        max_iter (int, optional): Maximum number of iterations for the solver. Default is None.
-        iterated_power (int or str, optional): Number of iterations for randomized solver. Default is 'auto'.
-        remove_zero_eig (bool, optional): Whether to remove zero eigenvalues. Default is False.
-        scale_components (bool, optional): Whether to scale the components. Default is False.
-        random_state (int or np.random.RandomState, optional): Random seed for reproducibility. Default is None.
-        copy (bool, optional): Whether to copy the input data. Default is True.
-        num_jobs (int, optional): Number of jobs to run in parallel for joblib.Parallel. Default is None.
-    References:
+    Parameters
+    ----------
+    num_components : int, optional
+        Number of components to keep. If ``None``, all components are kept.
+    mu : float, default=1.0
+        L2 kernel regularization coefficient.
+    eta : float, default=1.0
+        Class-dependency regularization coefficient.
+    ignore_y : bool, default=False
+        Whether to ignore ``y`` during fitting.
+    augment : {"pre", "post", None}, default=None
+        Whether to append/prepend group factors to the input.
+    kernel : str, default="linear"
+        Kernel type.
+    gamma : float, optional
+        Kernel coefficient for ``rbf``, ``poly``, and ``sigmoid`` kernels.
+    degree : int, default=3
+        Polynomial degree for ``poly`` kernel.
+    coef0 : float, default=1
+        Independent term for ``poly`` and ``sigmoid`` kernels.
+    kernel_params : dict, optional
+        Additional kernel parameters.
+    alpha : float, default=1.0
+        Regularization used in inverse transform.
+    fit_inverse_transform : bool, default=False
+        Whether to learn an inverse mapping.
+    eigen_solver : {"auto", "dense", "arpack", "randomized"}, default="auto"
+        Eigensolver to use.
+    tol : float, default=0
+        Convergence tolerance for iterative eigensolvers.
+    max_iter : int, optional
+        Maximum number of iterations for iterative eigensolvers.
+    iterated_power : int or {"auto"}, default="auto"
+        Number of power iterations for randomized solver.
+    remove_zero_eig : bool, default=False
+        Whether to remove zero eigencomponents.
+    scale_components : bool, default=False
+        Whether to scale components by eigenvalues.
+    random_state : int, RandomState instance or None, default=None
+        Random state used by stochastic eigensolvers.
+    copy : bool, default=True
+        Whether to copy the input during validation.
+    num_jobs : int, optional
+        Number of parallel jobs for pairwise kernel computation.
+
+    References
+    ----------
         [1] Yan, K., Kou, L. and Zhang, D., 2018. Learning domain-invariant subspace using domain features and
             independence maximization. IEEE transactions on cybernetics, 48(1), pp.288-299.
-    Examples:
+
+    Examples
+    --------
         >>> import numpy as np
         >>> from kale.embed.factorization import MIDA
         >>> # Generate random synthetic data

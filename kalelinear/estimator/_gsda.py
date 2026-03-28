@@ -21,28 +21,37 @@ def _compute_pred_loss(y, y_hat):
 
 
 class GSDA(BaseEstimator, ClassifierMixin):
-    """
-    Group-specific Discriminant Analysis Logistic Regression Classifier
+    """Group-specific logistic classifier with HSIC regularization.
+
     Parameters
     ----------
     lr : int or float, default=0.1
-        The tuning parameter for the optimization algorithm (here, Gradient Descent)
-        that determines the step size at each iteration while moving toward a minimum
-        of the cost function.
+        Learning rate used by gradient-based optimizers.
     max_iter : int, default=100
-        Maximum number of iterations taken for the optimization algorithm to converge
-
-    regularization : None or 'l2', default='l2'.
-        Option to perform L2 regularization.
+        Maximum number of optimization iterations.
+    regularization : {None, "l2"}, default="l2"
+        Optional regularization strategy for the prediction objective.
     l2_hparam : float, default=1.0
-        Inverse of regularization strength; must be a positive float.
-        Smaller values specify stronger regularization.
-    tolerance_grad : float, optional, default=1e-7
-        Value indicating the weight change between epochs in which
-        gradient descent should be terminated.
-    tolerance_change : float, optional, default=1e-8
-        Value indicating the change in loss function between epochs in which
-        gradient descent should be terminated.
+        L2 regularization strength multiplier.
+    tolerance_grad : float, default=1e-7
+        Stopping threshold for gradient magnitude.
+    tolerance_change : float, default=1e-9
+        Stopping threshold for objective change.
+    lambda_ : float, default=1.0
+        Weight for the HSIC-based penalty term.
+    optimizer : {"gd", "lbfgs"}, default="gd"
+        Optimization algorithm used in :meth:`fit`.
+    memory_size : int, default=10
+        History length used by the L-BFGS approximation.
+    random_state : int or None, default=None
+        Random seed used for initialization.
+
+    Attributes
+    ----------
+    theta : ndarray of shape (n_features + 1,)
+        Model parameters where the first entry is the intercept.
+    losses : dict
+        Optimization history for objective, prediction, HSIC loss, and runtime.
     """
 
     def __init__(
@@ -72,20 +81,23 @@ class GSDA(BaseEstimator, ClassifierMixin):
         self.random_state = random_state
 
     def fit(self, x, y, groups, target_idx=None):
-        """
-        Fit the model according to the given training data.
+        """Fit the GSDA classifier.
+
         Parameters
         ----------
         x : {array-like, sparse matrix} of shape (n_samples, n_features)
-            Training vector, where n_samples is the number of samples and
-            n_features is the number of features.
+            Training input samples.
         y : array-like of shape (n_samples,)
-            Target vector relative to X.
-        groups: array-like
-        target_idx: array-like
+            Binary labels for optimization.
+        groups : array-like of shape (n_samples,) or (n_samples, n_groups)
+            Group/domain indicators used by the HSIC term.
+        target_idx : array-like of shape (n_target,), optional
+            Indices indicating target samples. If ``None``, the first ``len(y)`` rows are used.
+
         Returns
         -------
-        self : object
+        self : GSDA
+            Fitted estimator.
         """
         x = np.asarray(x)
         y = np.asarray(y)
@@ -108,30 +120,31 @@ class GSDA(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_proba(self, x):
-        """
-        Probability estimates for samples in X.
+        """Estimate class probabilities.
+
         Parameters
         ----------
         x : array-like of shape (n_samples, n_features)
-            Vector to be scored, where `n_samples` is the number of samples and
-            `n_features` is the number of features.
+            Input samples.
+
         Returns
         -------
-        probs : array-like of shape (n_samples,)
-            Returns the probability of each sample.
+        probs : ndarray of shape (n_samples,)
+            Positive-class probabilities.
         """
         return expit((x @ self.theta[1:]) + self.theta[0])
 
     def predict(self, x):
-        """
-        Predict class labels for samples in X.
+        """Predict binary class labels.
+
         Parameters
         ----------
-        x : array_like or sparse matrix, shape (n_samples, n_features)
-            Samples.
+        x : array-like of shape (n_samples, n_features)
+            Input samples.
+
         Returns
         -------
-        labels : array, shape [n_samples]
+        labels : ndarray of shape (n_samples,)
             Predicted class label per sample.
         """
         y_proba = self.predict_proba(x)
@@ -141,11 +154,12 @@ class GSDA(BaseEstimator, ClassifierMixin):
         return y_pred
 
     def get_params(self, **kwargs):
-        """
-        Get method for models coefficients and intercept.
+        """Return fitted coefficients and intercept.
+
         Returns
         -------
         params : dict
+            Dictionary with ``intercept`` and ``coef`` keys.
         """
         try:
             params = dict()
@@ -156,16 +170,23 @@ class GSDA(BaseEstimator, ClassifierMixin):
             raise Exception("Fit the model first!")
 
     def _lbfgs_solver(self, x, y, groups, target_idx=None):
-        """optimization using L-BFGS
+        """Optimize parameters using a limited-memory BFGS-like update.
 
-        Args:
-            x (_type_): _description_
-            y (_type_): _description_
-            groups (_type_): _description_
-            target_idx (_type_, optional): _description_. Defaults to None.
+        Parameters
+        ----------
+        x : ndarray of shape (n_samples, n_features + 1)
+            Augmented design matrix including the intercept column.
+        y : ndarray of shape (n_target,)
+            Target labels.
+        groups : ndarray of shape (n_samples, n_groups)
+            Group indicators.
+        target_idx : ndarray of shape (n_target,), optional
+            Indices for target samples.
 
-        Returns:
-            _type_: _description_
+        Returns
+        -------
+        self : GSDA
+            Estimator with updated ``theta``.
         """
         delta_theta = []  # Δx
         delta_grads = []  # Δgrad
@@ -225,16 +246,23 @@ class GSDA(BaseEstimator, ClassifierMixin):
         return self
 
     def _gd_solver(self, x, y, groups, target_idx=None):
-        """optimization using gradient descent
+        """Optimize parameters using gradient descent.
 
-        Args:
-            x (array-like): _description_
-            y (array-like): _description_
-            groups (array-like): _description_
-            target_idx (array-like, optional): _description_. Defaults to None.
+        Parameters
+        ----------
+        x : ndarray of shape (n_samples, n_features + 1)
+            Augmented design matrix including the intercept column.
+        y : ndarray of shape (n_target,)
+            Target labels.
+        groups : ndarray of shape (n_samples, n_groups)
+            Group indicators.
+        target_idx : ndarray of shape (n_target,), optional
+            Indices for target samples.
 
-        Returns:
-            _type_: _description_
+        Returns
+        -------
+        self : GSDA
+            Estimator with updated ``theta``.
         """
         for _ in range(self.max_iter):
             delta_grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(x, y, groups, target_idx)

@@ -45,13 +45,19 @@ from sklearn.utils.validation import (
 
 
 def _centering_kernel(size, dtype=np.float64):
-    """Generate a centering kernel matrix.
+    """Generate a centering matrix.
 
-    Args:
-        size (int): The size of the kernel matrix.
-        dtype (data-type, optional): The desired data-type for the kernel matrix. Default is np.float64.
-    Returns:
-        array-like: The centering kernel matrix of shape (size, size).
+    Parameters
+    ----------
+    size : int
+        Number of rows/columns of the square matrix.
+    dtype : data-type, default=np.float64
+        Output dtype.
+
+    Returns
+    -------
+    ndarray of shape (size, size)
+        Centering matrix ``I - 1/n``.
     """
 
     identity = np.eye(size, dtype=dtype)
@@ -60,13 +66,19 @@ def _centering_kernel(size, dtype=np.float64):
 
 
 def _check_num_components(k, num_components):
-    """Check and set the number of components to keep after eigendecomposition.
+    """Resolve the effective number of components.
 
-    Args:
-        k (array-like): The kernel matrix.
-        num_components (int, optional): The number of components to keep. If None, all components are kept.
-    Returns:
-        int: The number of components to keep.
+    Parameters
+    ----------
+    k : ndarray
+        Kernel matrix.
+    num_components : int or None
+        Requested number of components.
+
+    Returns
+    -------
+    int
+        Effective number of components.
     """
     k_size = _num_features(k)
     if num_components is None:
@@ -80,13 +92,21 @@ def _check_num_components(k, num_components):
 
 
 def _check_solver(k, num_components, solver):
-    """Check and set the solver for eigendecomposition.
-    Args:
-        k (array-like): The kernel matrix.
-        num_components (int): The number of components to keep.
-        solver (str): The solver to use. Can be 'auto', 'arpack', 'randomized', or 'dense'.
-    Returns:
-        str: The solver to use.
+    """Resolve eigensolver strategy.
+
+    Parameters
+    ----------
+    k : ndarray
+        Kernel matrix.
+    num_components : int
+        Number of components to keep.
+    solver : {"auto", "arpack", "randomized", "dense"}
+        Requested solver.
+
+    Returns
+    -------
+    str
+        Effective solver name.
     """
     k_size = _num_features(k)
 
@@ -106,17 +126,31 @@ def _eigendecompose(
     tol=0,
     iterated_power="auto",
 ):
-    """Eigendecompose the kernel matrix.
-    Args:
-        k (array-like): The kernel matrix.
-        num_components (int, optional): The number of components to keep. If None, all components are kept.
-        solver (str): The solver to use. Can be 'auto', 'arpack', 'randomized', or 'dense'.
-        random_state (int or np.random.RandomState, optional): Random seed for reproducibility.
-        max_iter (int, optional): Maximum number of iterations for the solver.
-        tol (float, optional): Tolerance for convergence.
-        iterated_power (int or str, optional): Number of iterations for randomized solver.
-    Returns:
-        tuple: `(eigenvalues, eigenvectors)` of the kernel matrix.
+    """Compute eigenpairs for a kernel matrix.
+
+    Parameters
+    ----------
+    k : ndarray or tuple of ndarray
+        Kernel matrix ``a`` or generalized pair ``(a, b)``.
+    num_components : int, optional
+        Number of components to keep.
+    solver : {"auto", "arpack", "randomized", "dense"}, default="auto"
+        Eigensolver backend.
+    random_state : int, RandomState instance or None, default=None
+        Random state used by stochastic solver.
+    max_iter : int, optional
+        Maximum iterations for iterative solver.
+    tol : float, default=0
+        Convergence tolerance.
+    iterated_power : int or {"auto"}, default="auto"
+        Power iterations for randomized solver.
+
+    Returns
+    -------
+    eigenvalues : ndarray
+        Eigenvalues.
+    eigenvectors : ndarray
+        Corresponding eigenvectors.
     """
     # we accept tuple or list for k, in case a method
     # need to use a generalized eigenvalue decomposition
@@ -166,20 +200,27 @@ def _eigendecompose(
 
 
 def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, num_components=None, remove_zero_eig=False):
-    """Postprocess the eigenvalues and eigenvectors after eigendecomposition.
-    Args:
-        eigenvalues (array-like): The eigenvalues of the kernel matrix.
-        eigenvectors (array-like): The eigenvectors of the kernel matrix.
-        steps (list): The steps to perform in postprocessing, including:
-                        - "remove_significant_negative_eigenvalues"
-                        - "check_psd_eigenvalues"
-                        - "svd_flip"
-                        - "sort_eigencomponents"
-                        - "keep_positive_eigenvalues"
-        num_components (int, optional): The number of components to keep. If None, all components are kept.
-        remove_zero_eig (bool, optional): Whether to remove zero eigenvalues.
-    Returns:
-        tuple: `(eigenvalues, eigenvectors)` after postprocessing.
+    """Postprocess eigenvalues and eigenvectors.
+
+    Parameters
+    ----------
+    eigenvalues : ndarray
+        Eigenvalues from decomposition.
+    eigenvectors : ndarray
+        Eigenvectors from decomposition.
+    steps : list of str
+        Processing steps to apply in order.
+    num_components : int, optional
+        Requested number of output components.
+    remove_zero_eig : bool, default=False
+        Whether to drop zero-valued eigencomponents.
+
+    Returns
+    -------
+    eigenvalues : ndarray
+        Processed eigenvalues.
+    eigenvectors : ndarray
+        Processed eigenvectors.
     """
     for step in steps:
         if step == "remove_significant_negative_eigenvalues":
@@ -199,12 +240,21 @@ def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, num_component
 
 
 def _sort_eigencomponents(eigenvalues, eigenvectors):
-    """Sort the eigenvalues and eigenvectors in descending order.
-    Args:
-        eigenvalues (array-like): The eigenvalues of the kernel matrix.
-        eigenvectors (array-like): The eigenvectors of the kernel matrix.
-    Returns:
-        tuple: `(eigenvalues, eigenvectors)` sorted in descending order.
+    """Sort eigencomponents by descending eigenvalue.
+
+    Parameters
+    ----------
+    eigenvalues : ndarray
+        Eigenvalues.
+    eigenvectors : ndarray
+        Eigenvectors.
+
+    Returns
+    -------
+    eigenvalues : ndarray
+        Sorted eigenvalues.
+    eigenvectors : ndarray
+        Sorted eigenvectors.
     """
     indices = eigenvalues.argsort()[::-1]
     eigenvalues = eigenvalues[indices]
@@ -214,15 +264,25 @@ def _sort_eigencomponents(eigenvalues, eigenvectors):
 
 
 def _keep_positive_eigenvalues(eigenvalues, eigenvectors, num_components=None, remove_zero_eig=False):
-    """Keep only the positive eigenvalues and their corresponding eigenvectors. If `num_components is not None`,
-    or `remove_zero_eig=False`, the non-positive eigenvalues will not be removed.
-    Args:
-        eigenvalues (array-like): The eigenvalues of the kernel matrix.
-        eigenvectors (array-like): The eigenvectors of the kernel matrix.
-        num_components (int, optional): The number of components to keep. If None, all components are kept.
-        remove_zero_eig (bool, optional): Whether to remove zero eigenvalues.
-    Returns:
-        tuple: `(eigenvalues, eigenvectors)` with only positive eigenvalues and their corresponding eigenvectors.
+    """Filter non-positive eigencomponents.
+
+    Parameters
+    ----------
+    eigenvalues : ndarray
+        Eigenvalues.
+    eigenvectors : ndarray
+        Eigenvectors.
+    num_components : int, optional
+        Requested number of components.
+    remove_zero_eig : bool, default=False
+        Whether to remove zero eigenvalues.
+
+    Returns
+    -------
+    eigenvalues : ndarray
+        Filtered eigenvalues.
+    eigenvectors : ndarray
+        Filtered eigenvectors.
     """
     if remove_zero_eig or num_components is None:
         pos_mask = eigenvalues > 0
@@ -233,11 +293,17 @@ def _keep_positive_eigenvalues(eigenvalues, eigenvectors, num_components=None, r
 
 
 def _remove_significant_negative_eigenvalues(lambdas):
-    """Remove significant negative eigenvalues from the eigenvalues array.
-    Args:
-        lambdas (array-like): The eigenvalues of the kernel matrix.
-    Returns:
-        array-like: The eigenvalues with significant negative values set to zero.
+    """Clip significant negative eigenvalues to zero.
+
+    Parameters
+    ----------
+    lambdas : array-like
+        Eigenvalues.
+
+    Returns
+    -------
+    ndarray
+        Eigenvalues with significant negative entries removed.
     """
     lambdas = np.array(lambdas)
     is_double_precision = lambdas.dtype == np.float64
@@ -256,12 +322,19 @@ def _remove_significant_negative_eigenvalues(lambdas):
 
 
 def _scale_eigenvectors(eigenvalues, eigenvectors):
-    """Scale the eigenvectors by the square root of the eigenvalues.
-    Args:
-        eigenvalues (array-like): The eigenvalues of the kernel matrix.
-        eigenvectors (array-like): The eigenvectors of the kernel matrix.
-    Returns:
-        array-like: The scaled eigenvectors.
+    """Scale eigenvectors by the square root of eigenvalues.
+
+    Parameters
+    ----------
+    eigenvalues : ndarray
+        Eigenvalues.
+    eigenvectors : ndarray
+        Eigenvectors.
+
+    Returns
+    -------
+    ndarray
+        Scaled eigenvectors.
     """
     s = np.sqrt(eigenvalues)
 
@@ -276,7 +349,8 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
     """Base class for kernel domain adaptation methods. Extendable to support different
     kernel-based domain adaptation methods (e.g., MIDA, TCA, SCA).
 
-    Args:
+    Parameters
+    ----------
         num_components (int, optional): Number of components to keep. If None, all components are kept. Defaults to None.
         ignore_y (bool, optional): Whether to ignore the target variable `y` during fitting. Defaults to False.
         augment (str, optional): Whether to augment the input data with factors. Can be "pre" (prepend factors),
@@ -441,9 +515,12 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return safe_sparse_dot(w.T, self.x_fit_)
 
     def _fit_transform_in_place(self, k_x):
-        """Fit the model to the kernel matrix `k_x` and perform eigendecomposition in place.
-        Args:
-            k_x (array-like): The kernel matrix.
+        """Fit eigendecomposition on a precomputed kernel matrix.
+
+        Parameters
+        ----------
+        k_x : ndarray
+            Kernel matrix used for eigendecomposition.
         """
         eigenvalues, eigenvectors = _eigendecompose(
             k_x,
@@ -467,31 +544,43 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         self.eigenvectors_ = eigenvectors
 
     def _make_objective_kernel(self, k_x, y, factors):
-        """Create the objective kernel for the eigendecomposition.
-        Args:
-            k_x (array-like): The kernel matrix.
-            y (array-like): The target variable (binary or multiclass classification label) with shape (num_samples).
-            factors (array-like): The factors for adaptation with shape (num_samples, num_factors).
-                                Please preprocess the factors before domain adaptation
-                                (e.g. one-hot encode domain, gender, or standardize age).
-        Returns:
-            array-like: The objective kernel.
+        """Create the objective kernel for eigendecomposition.
+
+        Parameters
+        ----------
+        k_x : ndarray
+            Centered kernel matrix.
+        y : ndarray of shape (n_samples, n_classes)
+            Encoded labels.
+        factors : ndarray of shape (n_samples, n_factors)
+            Preprocessed adaptation factors.
+
+        Returns
+        -------
+        ndarray
+            Objective kernel.
         """
         return k_x
 
     @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, x, y=None, group_labels=None, **fit_params):
-        """Fit the model to the data `x` and target variable `y`.
-        Args:
-            x (array-like): The input data with shape (num_samples, num_features).
-            y (array-like, optional): The target variable (binary or multiclass classification label) with shape (num_samples).
-                                    Set -1 for unknown labels for semi-supervised MIDA. Default is None.
-            group_labels (array-like, optional): Categorical variables representing domain or grouping factors with shape
-                (num_samples, num_factors). Preprocessing (e.g., one-hot encode domain, gender, or age groups)
-                must be applied in advance. Default is None.
-            **fit_params: Additional parameters for fitting.
-        Returns:
-            self: The fitted model.
+        """Fit the domain adapter.
+
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_features)
+            Input data.
+        y : array-like of shape (n_samples,), optional
+            Target labels. Use ``-1`` for unknown labels in semi-supervised settings.
+        group_labels : array-like of shape (n_samples, n_factors), optional
+            Preprocessed grouping/domain factors.
+        **fit_params : dict
+            Additional fit parameters for compatibility.
+
+        Returns
+        -------
+        self : BaseKernelDomainAdapter
+            Fitted estimator.
         """
 
         # Data validation for x, y, and factors
@@ -551,15 +640,19 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return self
 
     def transform(self, x, group_labels=None):
-        """Transform the input data `x` to factor-independent feature space using the fitted
-        domain adapter.
-        Args:
-            x (array-like): The input data with shape (num_samples, num_features).
-            group_labels (array-like, optional): Categorical variables representing domain or grouping factors with
-                shape (num_samples, num_factors). Preprocessing (e.g., one-hot encode domain, gender, or age groups)
-                must be applied in advance. Default is None.
-        Returns:
-            array-like: The transformed data with shape (num_samples, num_components).
+        """Project data to the adapted feature space.
+
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_features)
+            Input data.
+        group_labels : array-like of shape (n_samples, n_factors), optional
+            Group factors required when augmentation is enabled.
+
+        Returns
+        -------
+        z : ndarray of shape (n_samples, n_components)
+            Projected representation.
         """
         check_is_fitted(self)
         accept_sparse = False if self.fit_inverse_transform else "csr"
@@ -586,12 +679,17 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return z
 
     def inverse_transform(self, z):
-        """Inverse transform the transformed data `z` back to the original space.
-        Args:
-            z (array-like): The transformed data with shape (num_samples, num_components).
-        Returns:
-            array-like: The inverse transformed data with shape (num_samples, num_features)
-                        or (num_samples, num_features + num_factors) if `augment=True`.
+        """Map projected features back to the original feature space.
+
+        Parameters
+        ----------
+        z : array-like of shape (n_samples, n_components)
+            Projected features.
+
+        Returns
+        -------
+        ndarray
+            Reconstructed samples in the original feature space.
         """
         check_is_fitted(self)
         if not self.fit_inverse_transform:
@@ -605,18 +703,23 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return safe_sparse_dot(k_z, self.dual_coef_)
 
     def fit_transform(self, x, y=None, group_labels=None, **fit_params):
-        """Fit the model to the data `x` and target variable `y` and remove
-        the effect of `factors`, and transform `x`.
-        Args:
-            x (array-like): The input data with shape (num_samples, num_features).
-            y (array-like, optional): The target variable (binary or multiclass classification label) with shape (num_samples).
-                                    Set -1 for unknown labels for semi-supervised MIDA. Default is None.
-            group_labels (array-like, optional): Categorical variables representing domain or grouping factors with
-                shape (num_samples, num_factors). Preprocessing (e.g., one-hot encode domain, gender, or age groups)
-                must be applied in advance. Default is None.
-            **fit_params: Additional parameters for fitting.
-        Returns:
-            array-like: The transformed data.
+        """Fit the adapter and return transformed features.
+
+        Parameters
+        ----------
+        x : array-like of shape (n_samples, n_features)
+            Input data.
+        y : array-like of shape (n_samples,), optional
+            Target labels.
+        group_labels : array-like of shape (n_samples, n_factors), optional
+            Group/domain factors.
+        **fit_params : dict
+            Additional fit parameters.
+
+        Returns
+        -------
+        ndarray
+            Projected features.
         """
         if y is None:
             # fit method of arity 1 (unsupervised transformation)

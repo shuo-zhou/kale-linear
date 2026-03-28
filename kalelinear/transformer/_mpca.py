@@ -4,8 +4,9 @@
 #          Lalu Muhammad Riza Rizky, l.m.rizky@sheffield.ac.uk
 # =============================================================================
 
-"""Python implementation of a tensor factorization algorithm Multilinear Principal Component Analysis (MPCA)
-and a matrix factorization algorithm Maximum Independence Domain Adaptation (MIDA）
+"""Tensor and kernel domain adaptation transformers.
+
+This module provides the MPCA transformer and associated utilities.
 """
 import logging
 import warnings
@@ -18,12 +19,19 @@ from tensorly.tenalg import multi_mode_dot
 
 
 def _check_n_dim(x, n_dims):
-    """Raise error if the dimension of the input data is inconsistent with the expected value.
+    """Validate the number of dimensions.
 
-    Args:
-        x (array-like tensor): input data, shape (n_samples, I_1, I_2, ..., I_N)
-        n_dims (int): number of dimensions expected, i.e. N+1
+    Parameters
+    ----------
+    x : ndarray of shape (n_samples, I_1, ..., I_N)
+        Input tensor data.
+    n_dims : int
+        Expected number of dimensions.
 
+    Raises
+    ------
+    ValueError
+        If ``x.ndim`` does not match ``n_dims``.
     """
     if not x.ndim == n_dims:
         error_msg = "The expected number of dimensions is %s but it is %s for given data" % (n_dims, x.ndim)
@@ -32,13 +40,19 @@ def _check_n_dim(x, n_dims):
 
 
 def _check_shape(x, shape_):
-    """Raise error if the shape for each sample (i.e. excluding the first dimension) of the input data is not consistent
-        with the given shape.
+    """Validate per-sample tensor shape.
 
-    Args:
-        x (array-like tensor): input data, shape (n_samples, I_1, I_2, ..., I_N)
-        shape_: expected shape for each sample, i.e. (I_1, I_2, ..., I_N)
+    Parameters
+    ----------
+    x : ndarray of shape (n_samples, I_1, ..., I_N)
+        Input tensor data.
+    shape_ : tuple
+        Expected per-sample shape ``(I_1, ..., I_N)``.
 
+    Raises
+    ------
+    ValueError
+        If the sample shape of ``x`` does not match ``shape_``.
     """
     if not x.shape[1:] == shape_:
         error_msg = "The expected shape of data is %s, but %s for given data" % (x.shape[1:], shape_)
@@ -47,42 +61,56 @@ def _check_shape(x, shape_):
 
 
 def _check_tensor_dim_shape(x, n_dims, shape_):
-    """Check whether the number of the input data dimensions and the shape for each sample are consistent with
-        expected values
+    """Validate both tensor dimensionality and sample shape.
 
-    Args:
-        x (array-like): input data, shape (n_samples, I_1, I_2, ..., I_N)
-        n_dims (int): number of dimensions expected, i.e. N+1
-        shape_: expected shape for each sample, i.e. (I_1, I_2, ..., I_N)
-
+    Parameters
+    ----------
+    x : ndarray of shape (n_samples, I_1, ..., I_N)
+        Input tensor data.
+    n_dims : int
+        Expected number of dimensions.
+    shape_ : tuple
+        Expected per-sample shape.
     """
     _check_n_dim(x, n_dims)
     _check_shape(x, shape_)
 
 
 class MPCA(BaseEstimator, TransformerMixin):
-    """MPCA implementation compatible with scikit-learn
+    """Multilinear Principal Component Analysis (MPCA) estimator.
 
-    Args:
-        var_ratio (float, optional): Percentage of variance explained (between 0 and 1). Defaults to 0.97.
-        max_iter (int, optional): Maximum number of iteration. Defaults to 1.
-        vectorize (bool): Whether return the transformed/projected tensor in vector. Defaults to False.
-        n_components (int): Number of components to keep. Applies only when vectorize=True. Defaults to None.
+    Parameters
+    ----------
+    var_ratio : float, default=0.97
+        Target cumulative explained variance ratio per mode.
+    max_iter : int, default=1
+        Maximum number of alternating optimization iterations.
+    vectorize : bool, default=False
+        If ``True``, output projected tensors as vectors.
+    n_components : int, optional
+        Number of output features when ``vectorize=True``.
 
-    Attributes:
-        proj_mats (list of arrays): A list of transposed projection matrices, shapes (P_1, I_1), ...,
-            (P_N, I_N), where P_1, ..., P_N are output tensor shape for each sample.
-        idx_order (array-like): The ordering index of projected (and vectorized) features in decreasing variance.
-        mean_ (array-like): Per-feature empirical mean, estimated from the training set, shape (I_1, I_2, ..., I_N).
-        shape_in (tuple): Input tensor shapes, i.e. (I_1, I_2, ..., I_N).
-        shape_out (tuple): Output tensor shapes, i.e. (P_1, P_2, ..., P_N).
+    Attributes
+    ----------
+    proj_mats : list of ndarray
+        Transposed projection matrices with shapes ``(P_i, I_i)``.
+    idx_order : ndarray
+        Feature ranking indices by descending projected variance.
+    mean_ : ndarray
+        Per-feature empirical mean of the training data.
+    shape_in : tuple
+        Input per-sample tensor shape.
+    shape_out : tuple
+        Output per-sample tensor shape after projection.
 
-    Reference:
+    References
+    ----------
         Haiping Lu, K.N. Plataniotis, and A.N. Venetsanopoulos, "MPCA: Multilinear Principal Component Analysis of
         Tensor Objects", IEEE Transactions on Neural Networks, Vol. 19, No. 1, Page: 18-39, January 2008. For initial
         Matlab implementation, please go to https://uk.mathworks.com/matlabcentral/fileexchange/26168.
 
-    Examples:
+    Examples
+    --------
         >>> import numpy as np
         >>> from kalelinear.transformer import MPCA
         >>> x = np.random.random((40, 20, 25, 20))
@@ -116,21 +144,36 @@ class MPCA(BaseEstimator, TransformerMixin):
         self.n_components = n_components
 
     def fit(self, x, y=None):
-        """Fit the model with input training data x.
+        """Fit MPCA to tensor data.
 
-        Args
-            x (array-like tensor): Input data, shape (n_samples, I_1, I_2, ..., I_N), where n_samples is the number of
-                samples, I_1, I_2, ..., I_N are the dimensions of corresponding mode (1, 2, ..., N), respectively.
-            y (None): Ignored variable.
+        Parameters
+        ----------
+        x : ndarray of shape (n_samples, I_1, ..., I_N)
+            Input tensor samples.
+        y : None, default=None
+            Ignored. Present for scikit-learn API compatibility.
 
-        Returns:
-            self (object). Returns the instance itself.
+        Returns
+        -------
+        self : MPCA
+            Fitted estimator.
         """
         self._fit(x)
         return self
 
     def _fit(self, x):
-        """Solve MPCA"""
+        """Internal solver for MPCA projection matrices.
+
+        Parameters
+        ----------
+        x : ndarray of shape (n_samples, I_1, ..., I_N)
+            Input tensor samples.
+
+        Returns
+        -------
+        self : MPCA
+            Fitted estimator.
+        """
 
         shape_ = x.shape  # shape of input data
         n_dims = x.ndim
@@ -190,17 +233,19 @@ class MPCA(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, x):
-        """Perform dimension reduction on x
+        """Project data to the MPCA subspace.
 
-        Args:
-            x (array-like tensor): Data to perform dimension reduction, shape (n_samples, I_1, I_2, ..., I_N).
+        Parameters
+        ----------
+        x : ndarray of shape (n_samples, I_1, ..., I_N) or (I_1, ..., I_N)
+            Input tensor data.
 
-        Returns:
-            array-like tensor:
-                Projected data in lower dimension, shape (n_samples, P_1, P_2, ..., P_N) if self.vectorize==False.
-                If self.vectorize==True, features will be sorted based on their explained variance ratio, shape
-                (n_samples, P_1 * P_2 * ... * P_N) if self.n_components is None, and shape (n_samples, n_components)
-                if self.n_component is a valid integer.
+        Returns
+        -------
+        x_projected : ndarray
+            Projected data. Shape is ``(n_samples, P_1, ..., P_N)`` when
+            ``vectorize=False``. Otherwise returns vectorized features with
+            optional truncation to ``n_components``.
         """
         # reshape x to shape (1, I_1, I_2, ..., I_N) if x in shape (I_1, I_2, ..., I_N), i.e. n_samples = 1
         if x.ndim == self.n_dims - 1:
@@ -226,17 +271,17 @@ class MPCA(BaseEstimator, TransformerMixin):
         return x_projected
 
     def inverse_transform(self, x):
-        """Reconstruct projected data to the original shape and add the estimated mean back
+        """Reconstruct original-space tensors from projected data.
 
-        Args:
-            x (array-like tensor): Data to be reconstructed, shape (n_samples, P_1, P_2, ..., P_N), if
-                self.vectorize == False, where P_1, P_2, ..., P_N are the reduced dimensions of corresponding
-                mode (1, 2, ..., N), respectively. If self.vectorize == True, shape (n_samples, self.n_components)
-                or shape (n_samples, P_1 * P_2 * ... * P_N).
+        Parameters
+        ----------
+        x : ndarray
+            Projected tensor data, either in tensor or vectorized format.
 
-        Returns:
-            array-like tensor:
-                Reconstructed tensor in original shape, shape (n_samples, I_1, I_2, ..., I_N)
+        Returns
+        -------
+        x_rec : ndarray of shape (n_samples, I_1, ..., I_N)
+            Reconstructed tensor data in the original shape.
         """
         # reshape x to tensor in shape (n_samples, self.shape_out) if x has been unfolded
         if x.ndim <= 2:
