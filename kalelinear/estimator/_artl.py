@@ -40,11 +40,11 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
         [description]
     y : array-like
 
-    ker_x : array-like
+    x_kernel_matrix : array-like
 
     M : array-like
 
-    unit_mat : array-like
+    unit_matrix : array-like
 
     """
 
@@ -66,11 +66,11 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
     else:
         y = ys.copy()
     n = X.shape[0]
-    ker_x = pairwise_kernels(X, **kwargs)
-    ker_x[np.isnan(ker_x)] = 0
-    unit_mat = np.eye(n)
+    x_kernel_matrix = pairwise_kernels(X, **kwargs)
+    x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
+    unit_matrix = np.eye(n)
 
-    return X, y, ker_x, M, unit_mat
+    return X, y, x_kernel_matrix, M, unit_matrix
 
 
 class ARSVM(BaseFramework):
@@ -148,17 +148,19 @@ class ARSVM(BaseFramework):
         ys = to_numpy(ys)
         Xt = to_numpy(Xt)
         yt = to_numpy(yt)
-        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
+        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
+            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        )
 
         y_ = self._lb.fit_transform(y)
 
         if self.gamma_ != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q_ = unit_mat + multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), ker_x])
+            Q_ = unit_matrix + multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), x_kernel_matrix])
         else:
-            Q_ = unit_mat + multi_dot([(self.lambda_ * M), ker_x])
+            Q_ = unit_matrix + multi_dot([(self.lambda_ * M), x_kernel_matrix])
 
-        self.coef_, self.support_ = self._solve_semi_dual(ker_x, y_, Q_, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(x_kernel_matrix, y_, Q_, self.C, self.solver)
         # if self._lb.y_type_ == 'binary':
         #     self.support_vectors_ = X[:nl, :][self.support_]
         #     self.n_support_ = self.support_vectors_.shape[0]
@@ -190,11 +192,11 @@ class ARSVM(BaseFramework):
         """
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")
-        # X_fit = self.X
+        # x_fit = self.X
         backend = infer_backend(X)
-        X_np = to_numpy(X)
-        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        scores = np.dot(ker_x, self.coef_)
+        x_np = to_numpy(X)
+        x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(x_kernel_matrix, self.coef_)
         return to_backend(scores, backend, reference=X)  # +self.intercept_
 
     def predict(self, X):
@@ -312,17 +314,19 @@ class ARRLS(BaseFramework):
         ys = to_numpy(ys)
         Xt = to_numpy(Xt)
         yt = to_numpy(yt)
-        X, y, ker_x, M, unit_mat = _init_artl(Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
-        n = ker_x.shape[0]
+        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
+            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        )
+        n = x_kernel_matrix.shape[0]
         nl = y.shape[0]
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
 
         if self.gamma_ != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
-            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), ker_x) + self.sigma_ * unit_mat
+            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), x_kernel_matrix) + self.sigma_ * unit_matrix
         else:
-            Q_ = np.dot((J + self.lambda_ * M), ker_x) + self.sigma_ * unit_mat
+            Q_ = np.dot((J + self.lambda_ * M), x_kernel_matrix) + self.sigma_ * unit_matrix
 
         y_ = self._lb.fit_transform(y)
         self.coef_ = self._solve_semi_ls(Q_, y_)
@@ -367,9 +371,9 @@ class ARRLS(BaseFramework):
             prediction scores, shape (n_samples)
         """
         backend = infer_backend(X)
-        X_np = to_numpy(X)
-        ker_x = pairwise_kernels(X_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
-        scores = np.dot(ker_x, self.coef_)
+        x_np = to_numpy(X)
+        x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(x_kernel_matrix, self.coef_)
         return to_backend(scores, backend, reference=X)
 
     def fit_predict(self, Xs, ys, Xt=None, yt=None):

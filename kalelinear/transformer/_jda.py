@@ -76,12 +76,12 @@ class JDA(BaseEstimator, TransformerMixin):
             X = Xs
             L = np.zeros((X.shape[0], X.shape[0]))
 
-        ker_x, unit_mat, ctr_mat, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
 
         # objective for optimization
-        obj = np.dot(np.dot(ker_x, L), ker_x.T) + self.lambda_ * unit_mat
+        obj = np.dot(np.dot(x_kernel_matrix, L), x_kernel_matrix.T) + self.lambda_ * unit_matrix
         # constraint subject to
-        st = np.dot(np.dot(ker_x, ctr_mat), ker_x.T)
+        st = np.dot(np.dot(x_kernel_matrix, centering_matrix), x_kernel_matrix.T)
         eig_values, eig_vectors = eig(obj, st)
 
         ev_abs = np.array(list(map(lambda item: np.abs(item), eig_values)))
@@ -112,12 +112,12 @@ class JDA(BaseEstimator, TransformerMixin):
         # check_is_fitted(self, 'Xs')
         # check_is_fitted(self, 'Xt')
         backend = infer_backend(X)
-        X_np = to_numpy(X)
-        X_fit = np.vstack((self.Xs, self.Xt))
-        ker_x = pairwise_kernels(X_np, X_fit, metric=self.kernel, filter_params=True, **self.kwargs)
+        x_np = to_numpy(X)
+        x_fit = np.vstack((self.Xs, self.Xt))
+        x_kernel_matrix = pairwise_kernels(x_np, x_fit, metric=self.kernel, filter_params=True, **self.kwargs)
 
-        X_transformed = np.dot(ker_x, self.U[:, : self.n_components])
-        return to_backend(X_transformed, backend, reference=X)
+        x_transformed = np.dot(x_kernel_matrix, self.U[:, : self.n_components])
+        return to_backend(x_transformed, backend, reference=X)
 
     def fit_transform(self, Xs, ys=None, Xt=None, yt=None):
         """

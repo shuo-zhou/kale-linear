@@ -23,6 +23,7 @@ This package contains implementations of the following methods:
 - [numpy](http://www.numpy.org/)
 - [cvxopt](http://cvxopt.org/)
 - [osqp](https://osqp.org/)
+- [tensorly](http://tensorly.org/)
 
 ## Installation
 
@@ -98,10 +99,10 @@ y_pred = clf.predict(Xt)
 
 ## Other Transfer Learning/Domain Adaptation Repos on GitHub
 
-- https://github.com/jindongwang/transferlearning
-- https://github.com/criteo-research/pytorch-ada
-- https://github.com/domainadaptation
-- https://github.com/rflamary/POT
-- https://github.com/wmkouw/libTLDA
-- https://github.com/wihoho/Domain-Adaptations
-- https://github.com/viggin/domain-adaptation-toolbox
+- [POT: Python Optimal Transport](https://github.com/rflamary/POT)
+- [Everything about Transfer Learning](https://github.com/jindongwang/transferlearning)
+- [ADA: (Yet) Another Domain Adaptation library](https://github.com/criteo-research/pytorch-ada)
+- [Domain Adaptation & Transfer Learning Repositories](https://github.com/domainadaptation)
+- [Library of transfer learners and domain-adaptive classifiers](https://github.com/wmkouw/libTLDA)
+- [domain-adaptation-toolbox](https://github.com/viggin/domain-adaptation-toolbox)
+- [Domain-Adaptations](https://github.com/wihoho/Domain-Adaptations)

@@ -8,14 +8,44 @@ from scipy.special import expit
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 
-def simple_hsic(w, x, groups):
-    n = x.shape[0]
-    ctr_mat = np.diag(np.ones(n)) - 1 / n
+def simple_hsic(w, X, groups):
+    """Compute the simplified HSIC term.
 
-    return multi_dot((x.T, ctr_mat, groups, groups.T, ctr_mat, x, w))
+    Parameters
+    ----------
+    w : array-like of shape (n_features,)
+        Model coefficients.
+    X : array-like of shape (n_samples, n_features)
+        Input data.
+    groups : array-like of shape (n_samples, n_groups)
+        Group or domain indicators.
+
+    Returns
+    -------
+    float
+        Simplified HSIC value.
+    """
+    n = X.shape[0]
+    centering_matrix = np.diag(np.ones(n)) - 1 / n
+
+    return multi_dot((X.T, centering_matrix, groups, groups.T, centering_matrix, X, w))
 
 
 def _compute_pred_loss(y, y_hat):
+    """Compute the binary prediction log loss.
+
+    Parameters
+    ----------
+    y : array-like of shape (n_samples,)
+        True binary labels.
+    y_hat : array-like of shape (n_samples,)
+        Predicted probabilities.
+
+    Returns
+    -------
+    float
+        Log loss value.
+    """
     pred_log_loss = -1 * (np.dot(y, np.log(y_hat + 1e-6)) + np.dot((1 - y), np.log(1 - y_hat + 1e-6))) / y.shape[0]
     return pred_log_loss
 
@@ -80,12 +110,12 @@ class GSDA(BaseEstimator, ClassifierMixin):
         self.memory_size = memory_size
         self.random_state = random_state
 
-    def fit(self, x, y, groups, target_idx=None):
+    def fit(self, X, y, groups, target_idx=None):
         """Fit the GSDA classifier.
 
         Parameters
         ----------
-        x : {array-like, sparse matrix} of shape (n_samples, n_features)
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
             Training input samples.
         y : array-like of shape (n_samples,)
             Binary labels for optimization.
@@ -99,32 +129,32 @@ class GSDA(BaseEstimator, ClassifierMixin):
         self : GSDA
             Fitted estimator.
         """
-        x = np.asarray(x)
+        X = np.asarray(X)
         y = np.asarray(y)
         groups = np.asarray(groups)
         if groups.ndim == 1:
             groups = groups.reshape((-1, 1))
         self.theta = np.random.random(
-            (x.shape[1] + 1),
+            (X.shape[1] + 1),
         )
-        x = np.concatenate((np.ones((x.shape[0], 1)), x), axis=1)
+        X = np.concatenate((np.ones((X.shape[0], 1)), X), axis=1)
 
         start_time = time()
         if self.optimizer == "lbfgs":
-            self._lbfgs_solver(x, y, groups, target_idx)
+            self._lbfgs_solver(X, y, groups, target_idx)
         else:
-            self._gd_solver(x, y, groups, target_idx)
+            self._gd_solver(X, y, groups, target_idx)
         time_used = time() - start_time
         self.losses["time"].append(time_used)
 
         return self
 
-    def predict_proba(self, x):
+    def predict_proba(self, X):
         """Estimate class probabilities.
 
         Parameters
         ----------
-        x : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features)
             Input samples.
 
         Returns
@@ -132,14 +162,14 @@ class GSDA(BaseEstimator, ClassifierMixin):
         probs : ndarray of shape (n_samples,)
             Positive-class probabilities.
         """
-        return expit((x @ self.theta[1:]) + self.theta[0])
+        return expit((X @ self.theta[1:]) + self.theta[0])
 
-    def predict(self, x):
+    def predict(self, X):
         """Predict binary class labels.
 
         Parameters
         ----------
-        x : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features)
             Input samples.
 
         Returns
@@ -147,7 +177,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         labels : ndarray of shape (n_samples,)
             Predicted class label per sample.
         """
-        y_proba = self.predict_proba(x)
+        y_proba = self.predict_proba(X)
         y_pred = np.zeros(y_proba.shape)
         y_pred[np.where(y_proba > 0.5)] = 1
 
@@ -169,12 +199,12 @@ class GSDA(BaseEstimator, ClassifierMixin):
         except self.theta is None:
             raise Exception("Fit the model first!")
 
-    def _lbfgs_solver(self, x, y, groups, target_idx=None):
+    def _lbfgs_solver(self, X, y, groups, target_idx=None):
         """Optimize parameters using a limited-memory BFGS-like update.
 
         Parameters
         ----------
-        x : ndarray of shape (n_samples, n_features + 1)
+        X : ndarray of shape (n_samples, n_features + 1)
             Augmented design matrix including the intercept column.
         y : ndarray of shape (n_target,)
             Target labels.
@@ -191,7 +221,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         delta_theta = []  # Δx
         delta_grads = []  # Δgrad
 
-        grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(x, y, groups, target_idx)
+        grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
         theta_old = self.theta.copy()
         grad_old = grad.copy()
 
@@ -231,7 +261,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
             theta_old = self.theta.copy()
 
             # Update gradient
-            grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(x, y, groups, target_idx)
+            grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
 
             self.losses["ovr"].append(pred_log_loss + hsic_log_loss)
             self.losses["pred"].append(pred_log_loss)
@@ -245,12 +275,12 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
         return self
 
-    def _gd_solver(self, x, y, groups, target_idx=None):
+    def _gd_solver(self, X, y, groups, target_idx=None):
         """Optimize parameters using gradient descent.
 
         Parameters
         ----------
-        x : ndarray of shape (n_samples, n_features + 1)
+        X : ndarray of shape (n_samples, n_features + 1)
             Augmented design matrix including the intercept column.
         y : ndarray of shape (n_target,)
             Target labels.
@@ -265,7 +295,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
             Estimator with updated ``theta``.
         """
         for _ in range(self.max_iter):
-            delta_grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(x, y, groups, target_idx)
+            delta_grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
             if _ % 10 == 0:
                 self.losses["ovr"].append(pred_log_loss + hsic_log_loss)
                 self.losses["pred"].append(pred_log_loss)
@@ -285,17 +315,17 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
         return self
 
-    def compute_gsda_gradient(self, x, y, groups, target_idx=None):
-        n_sample = x.shape[0]
+    def compute_gsda_gradient(self, X, y, groups, target_idx=None):
+        n_sample = X.shape[0]
         n_tgt = y.shape[0]
         if target_idx is None:
-            x_tgt = x[:n_tgt]
+            x_tgt = X[:n_tgt]
         else:
-            x_tgt = x[target_idx]
+            x_tgt = X[target_idx]
 
         y_hat = expit(x_tgt @ self.theta)
-        # n_feature = x.shape[1]
-        _simple_hsic = simple_hsic(self.theta, x, groups)
+        # n_feature = X.shape[1]
+        _simple_hsic = simple_hsic(self.theta, X, groups)
         hsic_proba = expit(multi_dot((self.theta, _simple_hsic)) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 

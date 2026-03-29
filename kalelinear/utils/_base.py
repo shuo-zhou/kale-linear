@@ -33,13 +33,13 @@ def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
         [description]
     """
     backend = infer_backend(X)
-    X_np = to_numpy(X)
-    n = X_np.shape[0]
-    knn_graph = kneighbors_graph(X_np, n_neighbour, metric=metric, mode=mode).toarray()
+    x_np = to_numpy(X)
+    n = x_np.shape[0]
+    knn_graph = kneighbors_graph(x_np, n_neighbour, metric=metric, mode=mode).toarray()
     W = np.zeros((n, n))
     knn_idx = np.logical_or(knn_graph, knn_graph.T)
     if mode == "distance":
-        graph_kernel = pairwise_distances(X_np, metric=metric)
+        graph_kernel = pairwise_distances(x_np, metric=metric)
         W[knn_idx] = graph_kernel[knn_idx]
     else:
         W[knn_idx] = 1
@@ -84,19 +84,19 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
 
 def base_init(X, kernel="linear", **kwargs):
     backend = infer_backend(X)
-    X_np = to_numpy(X)
-    n = X_np.shape[0]
+    x_np = to_numpy(X)
+    n = x_np.shape[0]
     # Construct kernel matrix
-    ker_x = pairwise_kernels(X_np, metric=kernel, filter_params=True, **kwargs)
-    ker_x[np.isnan(ker_x)] = 0
+    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel, filter_params=True, **kwargs)
+    x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
 
-    unit_mat = np.eye(n)
+    unit_matrix = np.eye(n)
     # Construct centering matrix
-    ctr_mat = unit_mat - 1.0 / n * np.ones((n, n))
+    centering_matrix = unit_matrix - 1.0 / n * np.ones((n, n))
 
     return (
-        to_backend(ker_x, backend, reference=X),
-        to_backend(unit_mat, backend, reference=X),
-        to_backend(ctr_mat, backend, reference=X),
+        to_backend(x_kernel_matrix, backend, reference=X),
+        to_backend(unit_matrix, backend, reference=X),
+        to_backend(centering_matrix, backend, reference=X),
         n,
     )

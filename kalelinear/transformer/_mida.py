@@ -139,44 +139,60 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 #         factors = to_numpy(factors)
 
 #         # Augment X with factors if requested
-#         X_aug = X
+#         x_aug = X
 #         if self.aug and factors is not np.ndarray and type(factors) is np.ndarray:
-#             X_aug = np.concatenate((X, factors), axis=1)
+#             x_aug = np.concatenate((X, factors), axis=1)
 #         elif self.aug and factors is not None:
-#             X_aug = np.concatenate((X, factors), axis=1)
+#             x_aug = np.concatenate((X, factors), axis=1)
 
 #         # Initialize kernel and matrices
-#         ker_x, unit_mat, ctr_mat, n = base_init(
-#             X_aug, kernel=self.kernel, gamma=self.gamma, degree=self.degree, coef0=self.coef0, **self.kwargs
+#         x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(
+#             x_aug, kernel=self.kernel, gamma=self.gamma, degree=self.degree, coef0=self.coef0, **self.kwargs
 #         )
 
 #         # Compute kernel for factors
 #         if factors is not None and type(factors) is np.ndarray:
-#             ker_c = np.dot(factors, factors.T)
+#             c_kernel_matrix = np.dot(factors, factors.T)
 #             # Normalize kernel
-#             ker_c = ker_c / np.max(np.abs(ker_c)) if np.max(np.abs(ker_c)) > 0 else ker_c
+#             c_kernel_matrix = (
+#                 c_kernel_matrix / np.max(np.abs(c_kernel_matrix))
+#                 if np.max(np.abs(c_kernel_matrix)) > 0
+#                 else c_kernel_matrix
+#             )
 #         else:
-#             ker_c = np.zeros((n, n))
+#             c_kernel_matrix = np.zeros((n, n))
 
 #         # Build objective and constraint matrices
 #         if y is not None and not self.ignore_y:
 #             # Semi-supervised MIDA
 #             y_mat = self._lb.fit_transform(y)
-#             ker_y = np.dot(y_mat, y_mat.T)
+#             y_kernel_matrix = np.dot(y_mat, y_mat.T)
 
 #             # Objective: maximize independence from factors
-#             obj = multi_dot([ker_x, ctr_mat, ker_c, ctr_mat, ker_x.T])
+#             obj = multi_dot(
+#                 [x_kernel_matrix, centering_matrix, c_kernel_matrix, centering_matrix, x_kernel_matrix.T]
+#             )
 
 #             # Constraint: include label and factor information
-#             st = multi_dot([ker_x, ctr_mat, (self.mu * unit_mat + self.eta * ker_y), ctr_mat, ker_x.T])
+#             st = multi_dot(
+#                 [
+#                     x_kernel_matrix,
+#                     centering_matrix,
+#                     (self.mu * unit_matrix + self.eta * y_kernel_matrix),
+#                     centering_matrix,
+#                     x_kernel_matrix.T,
+#                 ]
+#             )
 #         else:
 #             # Unsupervised MIDA
-#             obj = multi_dot([ker_x, ctr_mat, ker_c, ctr_mat, ker_x.T])
-#             st = multi_dot([ker_x, ctr_mat, ker_x.T])
+#             obj = multi_dot(
+#                 [x_kernel_matrix, centering_matrix, c_kernel_matrix, centering_matrix, x_kernel_matrix.T]
+#             )
+#             st = multi_dot([x_kernel_matrix, centering_matrix, x_kernel_matrix.T])
 
 #         # Apply L2 penalty if requested
 #         if self.penalty == "l2":
-#             obj = obj - self.lambda_ * unit_mat
+#             obj = obj - self.lambda_ * unit_matrix
 
 #         # Generalized eigendecomposition
 #         eig_values, eig_vectors = eig(obj, st)
@@ -184,7 +200,7 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 
 #         self.U = np.asarray(eig_vectors[:, idx_sorted], dtype=np.float64)
 #         self.eig_values_ = eig_values[idx_sorted]
-#         self.X_fit_ = X_aug
+#         self.x_fit_ = x_aug
 
 #         return self
 
@@ -204,7 +220,7 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 
 #         Returns
 #         -------
-#         X_transformed : array-like
+#         x_transformed : array-like
 #             Transformed data, shape (n_samples, n_components)
 #         """
 #         check_is_fitted(self, "U")
@@ -213,14 +229,14 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 #         factors = group_labels if group_labels is not None else covariates
 
 #         backend = infer_backend(X, factors)
-#         X_input = X
+#         x_input = X
 #         X = to_numpy(X)
 #         factors = to_numpy(factors)
 
 #         # Augment X with factors if needed
-#         X_aug = X
+#         x_aug = X
 #         if self.aug and factors is not None and type(factors) is np.ndarray:
-#             X_aug = np.concatenate((X, factors), axis=1)
+#             x_aug = np.concatenate((X, factors), axis=1)
 
 #         # Compute kernel between test data and training data
 #         kernel_params = {}
@@ -232,12 +248,12 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 #             kernel_params["coef0"] = self.coef0
 #         kernel_params.update(self.kwargs)
 
-#         ker_x = pairwise_kernels(X_aug, self.X_fit_, metric=self.kernel, filter_params=True, **kernel_params)
+#         x_kernel_matrix = pairwise_kernels(x_aug, self.x_fit_, metric=self.kernel, filter_params=True, **kernel_params)
 
 #         # Project onto the learned subspace
-#         X_transformed = np.dot(ker_x, self.U[:, : self.n_components])
+#         x_transformed = np.dot(x_kernel_matrix, self.U[:, : self.n_components])
 
-#         return to_backend(X_transformed, backend, reference=X_input)
+#         return to_backend(x_transformed, backend, reference=x_input)
 
 #     def fit_transform(self, X, y=None, covariates=None, group_labels=None):
 #         """Fit the model and transform data in one step.
@@ -257,7 +273,7 @@ from kalelinear.transformer._base import _centering_kernel, _num_features, BaseK
 
 #         Returns
 #         -------
-#         X_transformed : array-like
+#         x_transformed : array-like
 #             Transformed data, shape (n_samples, n_components)
 #         """
 #         # Support both parameter names
@@ -277,7 +293,7 @@ class MIDA(BaseKernelDomainAdapter):
 
     Parameters
     ----------
-    num_components : int, optional
+    n_components : int, optional
         Number of components to keep. If ``None``, all components are kept.
     mu : float, default=1.0
         L2 kernel regularization coefficient.
@@ -328,7 +344,7 @@ class MIDA(BaseKernelDomainAdapter):
     Examples
     --------
         >>> import numpy as np
-        >>> from kale.embed.factorization import MIDA
+        >>> from kalelinear.transformer import MIDA
         >>> # Generate random synthetic data
         >>> x_source = np.random.normal(loc=5, scale=1, size=(20, 40))
         >>> x_target = np.random.normal(loc=-5, scale=1, size=(20, 40))
@@ -354,7 +370,7 @@ class MIDA(BaseKernelDomainAdapter):
 
     def __init__(
         self,
-        num_components=None,
+        n_components=None,
         mu=1.0,
         eta=1.0,
         ignore_y=False,
@@ -383,7 +399,7 @@ class MIDA(BaseKernelDomainAdapter):
 
         # Kernel and Eigendecomposition parameters
         super().__init__(
-            num_components=num_components,
+            n_components=n_components,
             ignore_y=ignore_y,
             augment=augment,
             kernel=kernel,
@@ -401,20 +417,20 @@ class MIDA(BaseKernelDomainAdapter):
             scale_components=scale_components,
             random_state=random_state,
             copy=copy,
-            num_jobs=num_jobs,
+            n_jobs=num_jobs,
         )
 
-    def _make_objective_kernel(self, k_x, y, group_labels):
+    def _make_objective_kernel(self, x_kernel_matrix, y, covariates):
         # equivalent to `H` in the original paper
-        h = _centering_kernel(_num_features(k_x), k_x.dtype)
+        h = _centering_kernel(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
         # linear kernel used for the label and factors
-        k_y = pairwise_kernels(y, n_jobs=self.num_jobs)
-        k_f = pairwise_kernels(group_labels, n_jobs=self.num_jobs)
+        y_kernel_matrix = pairwise_kernels(y, n_jobs=self.n_jobs)
+        k_f = pairwise_kernels(covariates, n_jobs=self.n_jobs)
 
         centerer = KernelCenterer()
-        k_y = centerer.fit_transform(k_y)
+        y_kernel_matrix = centerer.fit_transform(y_kernel_matrix)
         k_f = centerer.fit_transform(k_f)
 
-        k_objective = multi_dot((k_x, self.mu * h + self.eta * k_y - k_f, k_x))
+        k_objective = multi_dot((x_kernel_matrix, self.mu * h + self.eta * y_kernel_matrix - k_f, x_kernel_matrix))
 
         return k_objective

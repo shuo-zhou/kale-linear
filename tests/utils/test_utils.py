@@ -19,13 +19,13 @@ def sample_data():
 
 
 def test_base_init_returns_expected_shapes(sample_data):
-    ker_x, unit_mat, ctr_mat, n = base_init(sample_data)
+    x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(sample_data)
 
-    assert ker_x.shape == (4, 4)
-    assert unit_mat.shape == (4, 4)
-    assert ctr_mat.shape == (4, 4)
+    assert x_kernel_matrix.shape == (4, 4)
+    assert unit_matrix.shape == (4, 4)
+    assert centering_matrix.shape == (4, 4)
     assert n == 4
-    assert np.allclose(unit_mat, np.eye(4))
+    assert np.allclose(unit_matrix, np.eye(4))
 
 
 @pytest.mark.parametrize("mode", ["distance", "connectivity"])

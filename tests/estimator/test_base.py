@@ -9,7 +9,9 @@ def test_base_framework_decision_function_uses_X_fit_data():
     X_train = np.array([[1.0, 0.0], [0.0, 1.0]])
     estimator = BaseFramework()
     estimator.coef_ = np.array([2.0, -1.0])
-    estimator._lb.fit(np.array([0, 1]))
+    estimator._lb.fit(
+        np.array([0, 1]),
+    ),
     estimator.X = X_train
 
     scores = estimator.decision_function(X_train)
@@ -38,7 +40,9 @@ def test_base_framework_decision_function_supports_torch_backend():
     X_train = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
     estimator = BaseFramework()
     estimator.coef_ = np.array([2.0, -1.0])
-    estimator._lb.fit(np.array([0, 1]))
+    estimator._lb.fit(
+        np.array([0, 1]),
+    ),
     estimator.X = X_train
 
     scores = estimator.decision_function(X_train)

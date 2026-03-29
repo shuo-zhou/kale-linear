@@ -18,12 +18,12 @@ from tensorly.base import fold, unfold
 from tensorly.tenalg import multi_mode_dot
 
 
-def _check_n_dim(x, n_dims):
+def _check_n_dim(X, n_dims):
     """Validate the number of dimensions.
 
     Parameters
     ----------
-    x : ndarray of shape (n_samples, I_1, ..., I_N)
+    X : ndarray of shape (n_samples, I_1, ..., I_N)
         Input tensor data.
     n_dims : int
         Expected number of dimensions.
@@ -31,20 +31,20 @@ def _check_n_dim(x, n_dims):
     Raises
     ------
     ValueError
-        If ``x.ndim`` does not match ``n_dims``.
+        If ``X.ndim`` does not match ``n_dims``.
     """
-    if not x.ndim == n_dims:
-        error_msg = "The expected number of dimensions is %s but it is %s for given data" % (n_dims, x.ndim)
+    if not X.ndim == n_dims:
+        error_msg = "The expected number of dimensions is %s but it is %s for given data" % (n_dims, X.ndim)
         logging.error(error_msg)
         raise ValueError(error_msg)
 
 
-def _check_shape(x, shape_):
+def _check_shape(X, shape_):
     """Validate per-sample tensor shape.
 
     Parameters
     ----------
-    x : ndarray of shape (n_samples, I_1, ..., I_N)
+    X : ndarray of shape (n_samples, I_1, ..., I_N)
         Input tensor data.
     shape_ : tuple
         Expected per-sample shape ``(I_1, ..., I_N)``.
@@ -52,28 +52,28 @@ def _check_shape(x, shape_):
     Raises
     ------
     ValueError
-        If the sample shape of ``x`` does not match ``shape_``.
+        If the sample shape of ``X`` does not match ``shape_``.
     """
-    if not x.shape[1:] == shape_:
-        error_msg = "The expected shape of data is %s, but %s for given data" % (x.shape[1:], shape_)
+    if not X.shape[1:] == shape_:
+        error_msg = "The expected shape of data is %s, but %s for given data" % (X.shape[1:], shape_)
         logging.error(error_msg)
         raise ValueError(error_msg)
 
 
-def _check_tensor_dim_shape(x, n_dims, shape_):
+def _check_tensor_dim_shape(X, n_dims, shape_):
     """Validate both tensor dimensionality and sample shape.
 
     Parameters
     ----------
-    x : ndarray of shape (n_samples, I_1, ..., I_N)
+    X : ndarray of shape (n_samples, I_1, ..., I_N)
         Input tensor data.
     n_dims : int
         Expected number of dimensions.
     shape_ : tuple
         Expected per-sample shape.
     """
-    _check_n_dim(x, n_dims)
-    _check_shape(x, shape_)
+    _check_n_dim(X, n_dims)
+    _check_shape(X, shape_)
 
 
 class MPCA(BaseEstimator, TransformerMixin):
@@ -143,12 +143,12 @@ class MPCA(BaseEstimator, TransformerMixin):
         self.vectorize = vectorize
         self.n_components = n_components
 
-    def fit(self, x, y=None):
+    def fit(self, X, y=None):
         """Fit MPCA to tensor data.
 
         Parameters
         ----------
-        x : ndarray of shape (n_samples, I_1, ..., I_N)
+        X : ndarray of shape (n_samples, I_1, ..., I_N)
             Input tensor samples.
         y : None, default=None
             Ignored. Present for scikit-learn API compatibility.
@@ -158,15 +158,15 @@ class MPCA(BaseEstimator, TransformerMixin):
         self : MPCA
             Fitted estimator.
         """
-        self._fit(x)
+        self._fit(X)
         return self
 
-    def _fit(self, x):
+    def _fit(self, X):
         """Internal solver for MPCA projection matrices.
 
         Parameters
         ----------
-        x : ndarray of shape (n_samples, I_1, ..., I_N)
+        X : ndarray of shape (n_samples, I_1, ..., I_N)
             Input tensor samples.
 
         Returns
@@ -175,12 +175,12 @@ class MPCA(BaseEstimator, TransformerMixin):
             Fitted estimator.
         """
 
-        shape_ = x.shape  # shape of input data
-        n_dims = x.ndim
+        shape_ = X.shape  # shape of input data
+        n_dims = X.ndim
 
         self.shape_in = shape_[1:]
-        self.mean_ = np.mean(x, axis=0)
-        x = x - self.mean_
+        self.mean_ = np.mean(X, axis=0)
+        X = X - self.mean_
 
         # init
         shape_out = ()
@@ -188,7 +188,7 @@ class MPCA(BaseEstimator, TransformerMixin):
 
         # get the output tensor shape based on the cumulative distribution of eigen values for each mode
         for i in range(1, n_dims):
-            mode_data_mat = unfold(x, mode=i)
+            mode_data_mat = unfold(X, mode=i)
             singular_vec_left, singular_val, singular_vec_right = la.svd(mode_data_mat, full_matrices=False)
             eig_values = np.square(singular_val)
             idx_sorted = (-1 * eig_values).argsort()
@@ -208,7 +208,7 @@ class MPCA(BaseEstimator, TransformerMixin):
         for i_iter in range(self.max_iter):
             for i in range(1, n_dims):  # ith mode
                 x_projected = multi_mode_dot(
-                    x,
+                    X,
                     [proj_mats[m] for m in range(n_dims - 1) if m != i - 1],
                     modes=[m for m in range(1, n_dims) if m != i],
                 )
@@ -219,7 +219,7 @@ class MPCA(BaseEstimator, TransformerMixin):
                 idx_sorted = (-1 * eig_values).argsort()
                 proj_mats[i - 1] = (singular_vec_left[:, idx_sorted][:, : shape_out[i - 1]]).T
 
-        x_projected = multi_mode_dot(x, proj_mats, modes=[m for m in range(1, n_dims)])
+        x_projected = multi_mode_dot(X, proj_mats, modes=[m for m in range(1, n_dims)])
         x_proj_unfold = unfold(x_projected, mode=0)  # unfold the tensor projection to shape (n_samples, n_features)
         # x_proj_cov = np.diag(np.dot(x_proj_unfold.T, x_proj_unfold))  # covariance of unfolded features
         x_proj_cov = np.sum(np.multiply(x_proj_unfold.T, x_proj_unfold.T), axis=1)  # memory saving computing covariance
@@ -232,12 +232,12 @@ class MPCA(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, x):
+    def transform(self, X):
         """Project data to the MPCA subspace.
 
         Parameters
         ----------
-        x : ndarray of shape (n_samples, I_1, ..., I_N) or (I_1, ..., I_N)
+        X : ndarray of shape (n_samples, I_1, ..., I_N) or (I_1, ..., I_N)
             Input tensor data.
 
         Returns
@@ -247,14 +247,14 @@ class MPCA(BaseEstimator, TransformerMixin):
             ``vectorize=False``. Otherwise returns vectorized features with
             optional truncation to ``n_components``.
         """
-        # reshape x to shape (1, I_1, I_2, ..., I_N) if x in shape (I_1, I_2, ..., I_N), i.e. n_samples = 1
-        if x.ndim == self.n_dims - 1:
-            x = x.reshape((1,) + x.shape)
-        _check_tensor_dim_shape(x, self.n_dims, self.shape_in)
-        x = x - self.mean_
+        # reshape X to shape (1, I_1, I_2, ..., I_N) if X in shape (I_1, I_2, ..., I_N), i.e. n_samples = 1
+        if X.ndim == self.n_dims - 1:
+            X = X.reshape((1,) + X.shape)
+        _check_tensor_dim_shape(X, self.n_dims, self.shape_in)
+        X = X - self.mean_
 
         # projected tensor in lower dimensions
-        x_projected = multi_mode_dot(x, self.proj_mats, modes=[m for m in range(1, self.n_dims)])
+        x_projected = multi_mode_dot(X, self.proj_mats, modes=[m for m in range(1, self.n_dims)])
 
         if self.vectorize:
             x_projected = unfold(x_projected, mode=0)
@@ -270,12 +270,12 @@ class MPCA(BaseEstimator, TransformerMixin):
 
         return x_projected
 
-    def inverse_transform(self, x):
+    def inverse_transform(self, X):
         """Reconstruct original-space tensors from projected data.
 
         Parameters
         ----------
-        x : ndarray
+        X : ndarray
             Projected tensor data, either in tensor or vectorized format.
 
         Returns
@@ -283,24 +283,24 @@ class MPCA(BaseEstimator, TransformerMixin):
         x_rec : ndarray of shape (n_samples, I_1, ..., I_N)
             Reconstructed tensor data in the original shape.
         """
-        # reshape x to tensor in shape (n_samples, self.shape_out) if x has been unfolded
-        if x.ndim <= 2:
-            if x.ndim == 1:
-                # reshape x to a 2D matrix (1, n_components) if x in shape (n_components,)
-                x = x.reshape((1, -1))
-            n_samples = x.shape[0]
-            n_features = x.shape[1]
+        # reshape X to tensor in shape (n_samples, self.shape_out) if X has been unfolded
+        if X.ndim <= 2:
+            if X.ndim == 1:
+                # reshape X to a 2D matrix (1, n_components) if X in shape (n_components,)
+                X = X.reshape((1, -1))
+            n_samples = X.shape[0]
+            n_features = X.shape[1]
             if n_features <= np.prod(self.shape_out):
                 x_ = np.zeros((n_samples, np.prod(self.shape_out)))
-                x_[:, self.idx_order[:n_features]] = x[:]
+                x_[:, self.idx_order[:n_features]] = X[:]
             else:
                 msg = "Feature dimension exceeds the shape upper limit."
                 logging.error(msg)
                 raise ValueError(msg)
 
-            x = fold(x_, mode=0, shape=((n_samples,) + self.shape_out))
+            X = fold(x_, mode=0, shape=((n_samples,) + self.shape_out))
 
-        x_rec = multi_mode_dot(x, self.proj_mats, modes=[m for m in range(1, self.n_dims)], transpose=True)
+        x_rec = multi_mode_dot(X, self.proj_mats, modes=[m for m in range(1, self.n_dims)], transpose=True)
 
         x_rec = x_rec + self.mean_
 

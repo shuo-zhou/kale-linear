@@ -65,14 +65,14 @@ def _centering_kernel(size, dtype=np.float64):
     return identity - ones_matrix / size
 
 
-def _check_num_components(k, num_components):
+def _check_n_components(kernel_matrix, n_components):
     """Resolve the effective number of components.
 
     Parameters
     ----------
-    k : ndarray
+    kernel_matrix : ndarray
         Kernel matrix.
-    num_components : int or None
+    n_components : int or None
         Requested number of components.
 
     Returns
@@ -80,27 +80,27 @@ def _check_num_components(k, num_components):
     int
         Effective number of components.
     """
-    k_size = _num_features(k)
-    if num_components is None:
-        num_components = k_size  # use all dimensions
+    k_size = _num_features(kernel_matrix)
+    if n_components is None:
+        n_components = k_size  # use all dimensions
     else:
-        num_components = min(k_size, num_components)
-    return num_components
+        n_components = min(k_size, n_components)
+    return n_components
 
 
 # solver helper
 
 
-def _check_solver(k, num_components, solver):
+def _check_solver(kernel_matrix, n_components, solver):
     """Resolve eigensolver strategy.
 
     Parameters
     ----------
-    k : ndarray
+    kernel_matrix : ndarray
         Kernel matrix.
-    num_components : int
+    n_components : int
         Number of components to keep.
-    solver : {"auto", "arpack", "randomized", "dense"}
+    solver: {"auto", "arpack", "randomized", "dense"}
         Requested solver.
 
     Returns
@@ -108,9 +108,9 @@ def _check_solver(k, num_components, solver):
     str
         Effective solver name.
     """
-    k_size = _num_features(k)
+    k_size = _num_features(kernel_matrix)
 
-    if solver == "auto" and k_size > 200 and num_components < 10:
+    if solver == "auto" and k_size > 200 and n_components < 10:
         solver = "arpack"
     elif solver == "auto":
         solver = "dense"
@@ -118,8 +118,8 @@ def _check_solver(k, num_components, solver):
 
 
 def _eigendecompose(
-    k,
-    num_components=None,
+    kernel_matrix,
+    n_components=None,
     solver="auto",
     random_state=None,
     max_iter=None,
@@ -130,9 +130,9 @@ def _eigendecompose(
 
     Parameters
     ----------
-    k : ndarray or tuple of ndarray
+    kernel_matrix : ndarray or tuple of ndarray
         Kernel matrix ``a`` or generalized pair ``(a, b)``.
-    num_components : int, optional
+    n_components : int, optional
         Number of components to keep.
     solver : {"auto", "arpack", "randomized", "dense"}, default="auto"
         Eigensolver backend.
@@ -154,19 +154,19 @@ def _eigendecompose(
     """
     # we accept tuple or list for k, in case a method
     # need to use a generalized eigenvalue decomposition
-    if isinstance(k, (tuple, list)):
-        a, b = k
+    if isinstance(kernel_matrix, (tuple, list)):
+        a, b = kernel_matrix
     else:
-        a, b = k, None
+        a, b = kernel_matrix, None
 
-    num_components = _check_num_components(k, num_components)
-    solver = _check_solver(k, num_components, solver)
+    n_components = _check_n_components(kernel_matrix, n_components)
+    solver = _check_solver(kernel_matrix, n_components, solver)
 
     if solver == "arpack":
         v0 = _init_arpack_v0(_num_features(a), random_state)
         return eigsh(
             a,
-            num_components,
+            n_components,
             b,
             which="LA",
             tol=tol,
@@ -184,7 +184,7 @@ def _eigendecompose(
 
         return _randomized_eigsh(
             a,
-            n_components=num_components,
+            n_components=n_components,
             n_iter=iterated_power,
             random_state=random_state,
             selection="module",
@@ -192,14 +192,14 @@ def _eigendecompose(
 
     # If solver is 'dense', use standard scipy.linalg.eigh
     # Note: subset_by_index specifies the indices of smallest/largest to return
-    index = (_num_features(a) - num_components, _num_features(a) - 1)
+    index = (_num_features(a) - n_components, _num_features(a) - 1)
     return la.eigh(a, b, subset_by_index=index)
 
 
 # Postprocess eignevalues and eigenvectors
 
 
-def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, num_components=None, remove_zero_eig=False):
+def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, n_components=None, remove_zero_eig=False):
     """Postprocess eigenvalues and eigenvectors.
 
     Parameters
@@ -210,7 +210,7 @@ def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, num_component
         Eigenvectors from decomposition.
     steps : list of str
         Processing steps to apply in order.
-    num_components : int, optional
+    n_components : int, optional
         Requested number of output components.
     remove_zero_eig : bool, default=False
         Whether to drop zero-valued eigencomponents.
@@ -233,7 +233,7 @@ def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, num_component
             eigenvalues, eigenvectors = _sort_eigencomponents(eigenvalues, eigenvectors)
         if step == "keep_positive_eigenvalues":
             eigenvalues, eigenvectors = _keep_positive_eigenvalues(
-                eigenvalues, eigenvectors, num_components, remove_zero_eig
+                eigenvalues, eigenvectors, n_components, remove_zero_eig
             )
 
     return eigenvalues, eigenvectors
@@ -263,7 +263,7 @@ def _sort_eigencomponents(eigenvalues, eigenvectors):
     return eigenvalues, eigenvectors
 
 
-def _keep_positive_eigenvalues(eigenvalues, eigenvectors, num_components=None, remove_zero_eig=False):
+def _keep_positive_eigenvalues(eigenvalues, eigenvectors, n_components=None, remove_zero_eig=False):
     """Filter non-positive eigencomponents.
 
     Parameters
@@ -272,7 +272,7 @@ def _keep_positive_eigenvalues(eigenvalues, eigenvectors, num_components=None, r
         Eigenvalues.
     eigenvectors : ndarray
         Eigenvectors.
-    num_components : int, optional
+    n_components : int, optional
         Requested number of components.
     remove_zero_eig : bool, default=False
         Whether to remove zero eigenvalues.
@@ -284,7 +284,7 @@ def _keep_positive_eigenvalues(eigenvalues, eigenvectors, num_components=None, r
     eigenvectors : ndarray
         Filtered eigenvectors.
     """
-    if remove_zero_eig or num_components is None:
+    if remove_zero_eig or n_components is None:
         pos_mask = eigenvalues > 0
         eigenvectors = eigenvectors[:, pos_mask]
         eigenvalues = eigenvalues[pos_mask]
@@ -351,7 +351,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
 
     Parameters
     ----------
-        num_components (int, optional): Number of components to keep. If None, all components are kept. Defaults to None.
+        n_components (int, optional): Number of components to keep. If None, all components are kept. Defaults to None.
         ignore_y (bool, optional): Whether to ignore the target variable `y` during fitting. Defaults to False.
         augment (str, optional): Whether to augment the input data with factors. Can be "pre" (prepend factors),
             "post" (append factors), or None (no augmentation). Defaults to None.
@@ -370,11 +370,11 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         scale_components (bool, optional): Whether to scale the components by the square root of their eigenvalues. Defaults to False.
         random_state (int, np.random.RandomState, or None, optional): Random seed for reproducibility. Defaults to None.
         copy (bool, optional): Whether to copy the input data during validation. Defaults to True.
-        num_jobs (int or None, optional): Number of jobs to run in parallel for pairwise kernel computations. Defaults to None.
+        n_jobs (int or None, optional): Number of jobs to run in parallel for pairwise kernel computations. Defaults to None.
     """
 
     _parameter_constraints: dict = {
-        "num_components": [Interval(Integral, 1, None, closed="left"), None],
+        "n_components": [Interval(Integral, 1, None, closed="left"), None],
         "ignore_y": ["boolean"],
         "augment": [StrOptions({"pre", "post"}), None],
         "kernel": [
@@ -398,7 +398,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         "scale_components": ["boolean"],
         "random_state": ["random_state"],
         "copy": ["boolean"],
-        "num_jobs": [None, Integral],
+        "n_jobs": [None, Integral],
     }
 
     _eigen_preprocess_steps = [
@@ -411,7 +411,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
 
     def __init__(
         self,
-        num_components=None,
+        n_components=None,
         ignore_y=False,
         augment=None,
         kernel="linear",
@@ -429,10 +429,10 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         scale_components=False,
         random_state=None,
         copy=True,
-        num_jobs=None,
+        n_jobs=None,
     ):
         # Truncation parameters
-        self.num_components = num_components
+        self.n_components = n_components
 
         # Supervision parameters
         self.ignore_y = ignore_y
@@ -444,7 +444,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         self.degree = degree
         self.coef0 = coef0
         self.copy = copy
-        self.num_jobs = num_jobs
+        self.n_jobs = n_jobs
 
         # Eigendecomposition parameters
         self.eigen_solver = eigen_solver
@@ -464,14 +464,14 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         # Additional adaptation parameters
         self.augment = augment
 
-    def _fit_inverse_transform(self, x_transformed, x):
-        if hasattr(x, "tocsr"):
+    def _fit_inverse_transform(self, x_transformed, X):
+        if hasattr(X, "tocsr"):
             raise NotImplementedError("Inverse transform not implemented for sparse matrices!")
 
         n_samples = x_transformed.shape[0]
-        k_x = self._get_kernel(x_transformed)
-        k_x.flat[:: n_samples + 1] += self.alpha
-        self.dual_coef_ = la.solve(k_x, x, assume_a="pos", overwrite_a=True)
+        x_transformed_kernel_matrix = self._get_kernel(x_transformed)
+        x_transformed_kernel_matrix.flat[:: n_samples + 1] += self.alpha
+        self.dual_coef_ = la.solve(x_transformed_kernel_matrix, X, assume_a="pos", overwrite_a=True)
         self.x_transformed_fit_ = x_transformed
 
     @property
@@ -494,17 +494,17 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             "_xfail_checks": {"check_transformer_n_iter": "Follows similar implementation to KernelPCA."},
         }
 
-    def _get_kernel(self, x, y=None):
+    def _get_kernel(self, X, Y=None):
         if callable(self.kernel):
             params = self.kernel_params or {}
         else:
             params = {"gamma": self.gamma_, "degree": self.degree, "coef0": self.coef0}
-        return pairwise_kernels(x, y, metric=self.kernel, filter_params=True, n_jobs=self.num_jobs, **params)
+        return pairwise_kernels(X, Y, metric=self.kernel, filter_params=True, n_jobs=self.n_jobs, **params)
 
     @property
     def orig_coef_(self):
         """Coefficients projected to the original feature space
-        with shape (num_components, num_features).
+        with shape (n_components, num_features).
         """
         check_is_fitted(self)
         if self.kernel != "linear":
@@ -514,17 +514,17 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             w = _scale_eigenvectors(self.eigenvalues_, w)
         return safe_sparse_dot(w.T, self.x_fit_)
 
-    def _fit_transform_in_place(self, k_x):
+    def _fit_transform_in_place(self, x_kernel_matrix):
         """Fit eigendecomposition on a precomputed kernel matrix.
 
         Parameters
         ----------
-        k_x : ndarray
+        x_kernel_matrix : ndarray
             Kernel matrix used for eigendecomposition.
         """
         eigenvalues, eigenvectors = _eigendecompose(
-            k_x,
-            self.num_components,
+            x_kernel_matrix,
+            self.n_components,
             self.eigen_solver,
             random_state=self.random_state,
             max_iter=self.max_iter,
@@ -536,19 +536,19 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             eigenvalues,
             eigenvectors,
             self._eigen_preprocess_steps,
-            num_components=self.num_components,
+            n_components=self.n_components,
             remove_zero_eig=self.remove_zero_eig,
         )
 
         self.eigenvalues_ = eigenvalues
         self.eigenvectors_ = eigenvectors
 
-    def _make_objective_kernel(self, k_x, y, factors):
+    def _make_objective_kernel(self, x_kernel_matrix, y, factors):
         """Create the objective kernel for eigendecomposition.
 
         Parameters
         ----------
-        k_x : ndarray
+        x_kernel_matrix : ndarray
             Centered kernel matrix.
         y : ndarray of shape (n_samples, n_classes)
             Encoded labels.
@@ -560,15 +560,15 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         ndarray
             Objective kernel.
         """
-        return k_x
+        return x_kernel_matrix
 
     @_fit_context(prefer_skip_nested_validation=True)
-    def fit(self, x, y=None, group_labels=None, **fit_params):
+    def fit(self, X, y=None, group_labels=None, **fit_params):
         """Fit the domain adapter.
 
         Parameters
         ----------
-        x : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features)
             Input data.
         y : array-like of shape (n_samples,), optional
             Target labels. Use ``-1`` for unknown labels in semi-supervised settings.
@@ -583,68 +583,68 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             Fitted estimator.
         """
 
-        # Data validation for x, y, and factors
+        # Data validation for X, y, and factors
         check_params = {
             "accept_sparse": False if self.fit_inverse_transform else "csr",
             "copy": self.copy,
         }
         if y is None or self.ignore_y:
-            x = validate_data(self, x, **check_params)
-            y_ohe = np.zeros((_num_samples(x), 1), dtype=x.dtype)
+            X = validate_data(self, X, **check_params)
+            y_one_hot = np.zeros((_num_samples(X), 1), dtype=X.dtype)
         else:
-            x, y = validate_data(self, x, y, **check_params)
+            X, y = validate_data(self, X, y, **check_params)
             y_type = type_of_target(y)
 
             if y_type not in ["binary", "multiclass"]:
                 raise ValueError(f"y should be a 'binary' or 'multiclass' target. Got '{y_type}' instead.")
 
             drop = (-1,) if np.any(y == -1) else None
-            ohe = OneHotEncoder(sparse_output=False, drop=drop)
-            y_ohe = ohe.fit_transform(np.expand_dims(y, 1))
+            one_hot_encoder = OneHotEncoder(sparse_output=False, drop=drop)
+            y_one_hot = one_hot_encoder.fit_transform(np.expand_dims(y, 1))
 
-            self.classes_ = ohe.categories_[0]
+            self.classes_ = one_hot_encoder.categories_[0]
 
         if group_labels is None:
             raise ValueError(f"Group labels must be provided for `{self.__class__.__name__}` during `fit`.")
 
         # k_objective workaround to validate the group_labels' shape
         factor_validator = FunctionTransformer()
-        factor_validator.fit(group_labels, x)
+        factor_validator.fit(group_labels, X)
         group_labels = factor_validator.transform(group_labels)
 
         # Append the factors/phenotypes to the input data if augment=True
-        x_aug = x
+        x_aug = X
         if self.augment is not None:
             self._factor_validator = factor_validator
 
         if self.augment == "pre":
-            x_aug = np.hstack((x, group_labels))
+            x_aug = np.hstack((X, group_labels))
 
         # To avoid having duplicate variables, x_fit_ cannot be renamed
         # to x_fit_ as it is predefined in KernelPCA's implementation
         self.x_fit_ = x_aug
-        self.gamma_ = 1 / _num_features(x) if self.gamma is None else self.gamma
+        self.gamma_ = 1 / _num_features(X) if self.gamma is None else self.gamma
         self._centerer = KernelCenterer()
 
-        k_x = self._get_kernel(self.x_fit_)
-        k_x = self._centerer.fit_transform(k_x)
+        x_fit_kernel_matrix = self._get_kernel(self.x_fit_)
+        x_fit_kernel_matrix = self._centerer.fit_transform(x_fit_kernel_matrix)
 
-        k_objective = self._make_objective_kernel(k_x, y_ohe, group_labels)
+        k_objective = self._make_objective_kernel(x_fit_kernel_matrix, y_one_hot, group_labels)
 
         # Fit the transformation and inverse transformation for the kernel matrix
         self._fit_transform_in_place(k_objective)
         if self.fit_inverse_transform:
-            x_transformed = self.transform(x, group_labels)
-            self._fit_inverse_transform(x_transformed, x)
+            x_transformed = self.transform(X, group_labels)
+            self._fit_inverse_transform(x_transformed, X)
 
         return self
 
-    def transform(self, x, group_labels=None):
+    def transform(self, X, group_labels=None):
         """Project data to the adapted feature space.
 
         Parameters
         ----------
-        x : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features)
             Input data.
         group_labels : array-like of shape (n_samples, n_factors), optional
             Group factors required when augmentation is enabled.
@@ -656,22 +656,22 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         """
         check_is_fitted(self)
         accept_sparse = False if self.fit_inverse_transform else "csr"
-        x = validate_data(self, x, accept_sparse=accept_sparse, reset=False)
+        X = validate_data(self, X, accept_sparse=accept_sparse, reset=False)
 
         if group_labels is None and self.augment in {"pre", "post"}:
             raise ValueError("Factors must be provided for transform when `augment` is 'pre' or 'post'.")
 
         if self.augment == "pre":
-            x = np.hstack((x, group_labels))
+            X = np.hstack((X, group_labels))
 
-        k_x = self._get_kernel(x, self.x_fit_)
-        k_x = self._centerer.transform(k_x)
+        x_fit_kernel_matrix = self._get_kernel(X, self.x_fit_)
+        x_fit_kernel_matrix = self._centerer.transform(x_fit_kernel_matrix)
 
         w = self.eigenvectors_
         if self.scale_components:
             w = _scale_eigenvectors(self.eigenvalues_, w)
 
-        z = safe_sparse_dot(k_x, w)
+        z = safe_sparse_dot(x_fit_kernel_matrix, w)
 
         if self.augment == "post":
             z = np.hstack((z, group_labels))
@@ -702,12 +702,12 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         k_z = self._get_kernel(z, self.x_transformed_fit_)
         return safe_sparse_dot(k_z, self.dual_coef_)
 
-    def fit_transform(self, x, y=None, group_labels=None, **fit_params):
+    def fit_transform(self, X, y=None, group_labels=None, **fit_params):
         """Fit the adapter and return transformed features.
 
         Parameters
         ----------
-        x : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features)
             Input data.
         y : array-like of shape (n_samples,), optional
             Target labels.
@@ -723,9 +723,9 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         """
         if y is None:
             # fit method of arity 1 (unsupervised transformation)
-            self.fit(x, group_labels=group_labels, **fit_params)
+            self.fit(X, group_labels=group_labels, **fit_params)
         else:
             # fit method of arity 2 (supervised transformation)
-            self.fit(x, y, group_labels, **fit_params)
+            self.fit(X, y, group_labels, **fit_params)
 
-        return self.transform(x, group_labels)
+        return self.transform(X, group_labels)

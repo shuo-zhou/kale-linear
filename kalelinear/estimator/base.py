@@ -40,35 +40,35 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         self.y = None
 
     @classmethod
-    def _solve_semi_dual(cls, kernel_x, y, obj_core, C, solver="osqp"):
-        kernel_x = to_numpy(kernel_x)
+    def _solve_semi_dual(cls, x_kernel_matrix, y, obj_core, C, solver="osqp"):
+        x_kernel_matrix = to_numpy(x_kernel_matrix)
         y = to_numpy(y)
         obj_core = to_numpy(obj_core)
         if len(y.shape) == 1:
-            coef_, support_ = cls._semi_binary_dual(kernel_x, y, obj_core, C, solver)
+            coef_, support_ = cls._semi_binary_dual(x_kernel_matrix, y, obj_core, C, solver)
             support_ = [support_]
         else:
-            coef_ = np.zeros((kernel_x.shape[1], y.shape[1]))
+            coef_ = np.zeros((x_kernel_matrix.shape[1], y.shape[1]))
             support_ = []
             for i in range(y.shape[1]):
-                coef_i, support_i = cls._semi_binary_dual(kernel_x, y[:, i], obj_core, C, solver)
+                coef_i, support_i = cls._semi_binary_dual(x_kernel_matrix, y[:, i], obj_core, C, solver)
                 coef_[:, i] = coef_i
                 support_.append(support_i)
 
         return coef_, support_
 
     @classmethod
-    def _semi_binary_dual(cls, kernel_x, y, obj_core, C, solver="osqp"):
-        kernel_x = to_numpy(kernel_x)
+    def _semi_binary_dual(cls, x_kernel_matrix, y, obj_core, C, solver="osqp"):
+        x_kernel_matrix = to_numpy(x_kernel_matrix)
         y = to_numpy(y)
         obj_core = to_numpy(obj_core)
         n_labeled = y.shape[0]
-        n = kernel_x.shape[0]
+        n = x_kernel_matrix.shape[0]
         J = np.zeros((n_labeled, n))
         J[:n_labeled, :n_labeled] = np.eye(n_labeled)
         obj_inv = inv(obj_core)
         y_diag = np.diag(y.reshape(-1))
-        Q = multi_dot([y_diag, J, kernel_x, obj_inv, J.T, y_diag]).astype("float32")
+        Q = multi_dot([y_diag, J, x_kernel_matrix, obj_inv, J.T, y_diag]).astype("float32")
         alpha = cls._quadprog(Q, y, C, solver)
         coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
         support_ = np.where((alpha > 0) & (alpha < C))
@@ -137,9 +137,11 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
 
     def decision_function(self, X):
         backend = infer_backend(X)
-        X_np = to_numpy(X)
-        kernel_x = pairwise_kernels(X_np, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs)
-        scores = np.dot(kernel_x, to_numpy(self.coef_))
+        x_np = to_numpy(X)
+        x_kernel_matrix = pairwise_kernels(
+            x_np, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs
+        )
+        scores = np.dot(x_kernel_matrix, to_numpy(self.coef_))
         return to_backend(scores, backend, reference=X)
 
     def predict(self, X):
