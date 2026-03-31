@@ -2,34 +2,19 @@
 # @author: Shuo Zhou, Lalu Muhammad Riza Rizky, The University of Sheffield
 # @contact: shuo.zhou@sheffield.ac.uk
 # =============================================================================
-"""Base classes and utilities for domain adaptation methods.
+"""Base classes and utilities for kernel domain adaptation methods."""
 
-This module provides shared utilities and base classes for kernel-based domain adaptation
-methods such as TCA, JDA, and MIDA.
-
-Available utilities:
-  - compute_eigendecomposition: Perform generalized eigendecomposition
-  - get_kernel: Compute kernel matrices
-  - BaseKernelDomainAdapter: Base class for kernel-based methods
-
-Usage:
-  Other domain adaptation methods can import and use these utilities:
-
-  from kalelinear.transformer._base import compute_eigendecomposition, get_kernel
-
-  or inherit from BaseKernelDomainAdapter for method-level shared functionality.
-"""
-
+from dataclasses import dataclass
 from numbers import Integral, Real
 
 import numpy as np
 import scipy.linalg as la
 from scipy.sparse.linalg import eigsh
-from sklearn.base import _fit_context, BaseEstimator, ClassNamePrefixFeaturesOutMixin, TransformerMixin
+from sklearn.base import _fit_context, BaseEstimator, ClassNamePrefixFeaturesOutMixin, clone, TransformerMixin
 from sklearn.metrics.pairwise import PAIRWISE_KERNEL_FUNCTIONS, pairwise_kernels
 from sklearn.preprocessing import FunctionTransformer, KernelCenterer, OneHotEncoder
 from sklearn.utils._arpack import _init_arpack_v0
-from sklearn.utils._param_validation import Interval, StrOptions
+from sklearn.utils._param_validation import HasMethods, Interval, StrOptions
 from sklearn.utils.extmath import _randomized_eigsh, safe_sparse_dot, svd_flip
 from sklearn.utils.multiclass import type_of_target
 from sklearn.utils.validation import (
@@ -41,144 +26,102 @@ from sklearn.utils.validation import (
     validate_data,
 )
 
-# from kalelinear.utils import base_init, infer_backend, to_backend, to_numpy
+from kalelinear.utils import mmd_coef
+
+
+@dataclass
+class KernelFitContext:
+    """Shared fit-time context for kernel domain adapters."""
+
+    X_input: np.ndarray
+    X_fit: np.ndarray
+    covariates_input: np.ndarray | None = None
+    covariates_fit: np.ndarray | None = None
+    y_input: np.ndarray | None = None
+    y_fit: np.ndarray | None = None
+    y_encoded: np.ndarray | None = None
+    classes: np.ndarray | None = None
+    source_idx: np.ndarray | None = None
+    target_idx: np.ndarray | None = None
+    ns: int | None = None
+    nt: int | None = None
+    ys: np.ndarray | None = None
+    yt: np.ndarray | None = None
+    target_covariate: object | None = None
 
 
 def _centering_kernel(size, dtype=np.float64):
-    """Generate a centering matrix.
-
-    Parameters
-    ----------
-    size : int
-        Number of rows/columns of the square matrix.
-    dtype : data-type, default=np.float64
-        Output dtype.
-
-    Returns
-    -------
-    ndarray of shape (size, size)
-        Centering matrix ``I - 1/n``.
-    """
-
+    """Generate a centering matrix."""
     identity = np.eye(size, dtype=dtype)
     ones_matrix = np.ones((size, size), dtype)
     return identity - ones_matrix / size
 
 
-def _check_n_components(kernel_matrix, n_components):
-    """Resolve the effective number of components.
+def _get_eigenproblem_matrices(eigenproblem):
+    """Normalize an eigenproblem specification to ``(A, B)``."""
+    if isinstance(eigenproblem, (tuple, list)):
+        return eigenproblem[0], eigenproblem[1]
+    return eigenproblem, None
 
-    Parameters
-    ----------
-    kernel_matrix : ndarray
-        Kernel matrix.
-    n_components : int or None
-        Requested number of components.
 
-    Returns
-    -------
-    int
-        Effective number of components.
-    """
-    k_size = _num_features(kernel_matrix)
+def _check_n_components(eigenproblem, n_components):
+    """Resolve the effective number of components."""
+    a, _ = _get_eigenproblem_matrices(eigenproblem)
+    problem_size = _num_features(a)
     if n_components is None:
-        n_components = k_size  # use all dimensions
+        n_components = problem_size
     else:
-        n_components = min(k_size, n_components)
+        n_components = min(problem_size, n_components)
     return n_components
 
 
-# solver helper
+def _check_solver(eigenproblem, n_components, solver, eigenvalue_order):
+    """Resolve eigensolver strategy."""
+    a, _ = _get_eigenproblem_matrices(eigenproblem)
+    problem_size = _num_features(a)
 
-
-def _check_solver(kernel_matrix, n_components, solver):
-    """Resolve eigensolver strategy.
-
-    Parameters
-    ----------
-    kernel_matrix : ndarray
-        Kernel matrix.
-    n_components : int
-        Number of components to keep.
-    solver: {"auto", "arpack", "randomized", "dense"}
-        Requested solver.
-
-    Returns
-    -------
-    str
-        Effective solver name.
-    """
-    k_size = _num_features(kernel_matrix)
-
-    if solver == "auto" and k_size > 200 and n_components < 10:
+    if solver == "auto" and problem_size > 200 and n_components < 10:
         solver = "arpack"
     elif solver == "auto":
         solver = "dense"
+
+    # Randomized eigensolvers are naturally aligned with dominant eigenpairs.
+    if solver == "randomized" and eigenvalue_order == "ascending":
+        solver = "dense"
+
     return solver
 
 
 def _eigendecompose(
-    kernel_matrix,
+    eigenproblem,
     n_components=None,
     solver="auto",
     random_state=None,
     max_iter=None,
     tol=0,
     iterated_power="auto",
+    eigenvalue_order="descending",
 ):
-    """Compute eigenpairs for a kernel matrix.
+    """Compute eigenpairs for a kernel matrix or a generalized eigenproblem."""
+    a, b = _get_eigenproblem_matrices(eigenproblem)
 
-    Parameters
-    ----------
-    kernel_matrix : ndarray or tuple of ndarray
-        Kernel matrix ``a`` or generalized pair ``(a, b)``.
-    n_components : int, optional
-        Number of components to keep.
-    solver : {"auto", "arpack", "randomized", "dense"}, default="auto"
-        Eigensolver backend.
-    random_state : int, RandomState instance or None, default=None
-        Random state used by stochastic solver.
-    max_iter : int, optional
-        Maximum iterations for iterative solver.
-    tol : float, default=0
-        Convergence tolerance.
-    iterated_power : int or {"auto"}, default="auto"
-        Power iterations for randomized solver.
-
-    Returns
-    -------
-    eigenvalues : ndarray
-        Eigenvalues.
-    eigenvectors : ndarray
-        Corresponding eigenvectors.
-    """
-    # we accept tuple or list for k, in case a method
-    # need to use a generalized eigenvalue decomposition
-    if isinstance(kernel_matrix, (tuple, list)):
-        a, b = kernel_matrix
-    else:
-        a, b = kernel_matrix, None
-
-    n_components = _check_n_components(kernel_matrix, n_components)
-    solver = _check_solver(kernel_matrix, n_components, solver)
+    n_components = _check_n_components((a, b), n_components)
+    solver = _check_solver((a, b), n_components, solver, eigenvalue_order)
 
     if solver == "arpack":
         v0 = _init_arpack_v0(_num_features(a), random_state)
+        which = "LA" if eigenvalue_order == "descending" else "SA"
         return eigsh(
             a,
             n_components,
             b,
-            which="LA",
+            which=which,
             tol=tol,
             maxiter=max_iter,
             v0=v0,
         )
 
     if solver == "randomized":
-        # To support methods that require generalized eigendecomposition,
-        # for randomized solver that doesn't support it by default.
-        # We use the inverse of b to transform a to obtain an equivalent
-        # formulation using regular eigendecomposition.
         if b is not None:
             a = la.inv(b) @ a
 
@@ -190,38 +133,22 @@ def _eigendecompose(
             selection="module",
         )
 
-    # If solver is 'dense', use standard scipy.linalg.eigh
-    # Note: subset_by_index specifies the indices of smallest/largest to return
-    index = (_num_features(a) - n_components, _num_features(a) - 1)
+    if eigenvalue_order == "descending":
+        index = (_num_features(a) - n_components, _num_features(a) - 1)
+    else:
+        index = (0, n_components - 1)
     return la.eigh(a, b, subset_by_index=index)
 
 
-# Postprocess eignevalues and eigenvectors
-
-
-def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, n_components=None, remove_zero_eig=False):
-    """Postprocess eigenvalues and eigenvectors.
-
-    Parameters
-    ----------
-    eigenvalues : ndarray
-        Eigenvalues from decomposition.
-    eigenvectors : ndarray
-        Eigenvectors from decomposition.
-    steps : list of str
-        Processing steps to apply in order.
-    n_components : int, optional
-        Requested number of output components.
-    remove_zero_eig : bool, default=False
-        Whether to drop zero-valued eigencomponents.
-
-    Returns
-    -------
-    eigenvalues : ndarray
-        Processed eigenvalues.
-    eigenvectors : ndarray
-        Processed eigenvectors.
-    """
+def _postprocess_eigencomponents(
+    eigenvalues,
+    eigenvectors,
+    steps,
+    n_components=None,
+    remove_zero_eig=False,
+    sort_order="descending",
+):
+    """Postprocess eigenvalues and eigenvectors."""
     for step in steps:
         if step == "remove_significant_negative_eigenvalues":
             eigenvalues = _remove_significant_negative_eigenvalues(eigenvalues)
@@ -230,7 +157,7 @@ def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, n_components=
         if step == "svd_flip":
             eigenvectors, _ = svd_flip(eigenvectors, None)
         if step == "sort_eigencomponents":
-            eigenvalues, eigenvectors = _sort_eigencomponents(eigenvalues, eigenvectors)
+            eigenvalues, eigenvectors = _sort_eigencomponents(eigenvalues, eigenvectors, sort_order=sort_order)
         if step == "keep_positive_eigenvalues":
             eigenvalues, eigenvectors = _keep_positive_eigenvalues(
                 eigenvalues, eigenvectors, n_components, remove_zero_eig
@@ -239,51 +166,19 @@ def _postprocess_eigencomponents(eigenvalues, eigenvectors, steps, n_components=
     return eigenvalues, eigenvectors
 
 
-def _sort_eigencomponents(eigenvalues, eigenvectors):
-    """Sort eigencomponents by descending eigenvalue.
+def _sort_eigencomponents(eigenvalues, eigenvectors, sort_order="descending"):
+    """Sort eigencomponents by eigenvalue."""
+    indices = eigenvalues.argsort()
+    if sort_order == "descending":
+        indices = indices[::-1]
 
-    Parameters
-    ----------
-    eigenvalues : ndarray
-        Eigenvalues.
-    eigenvectors : ndarray
-        Eigenvectors.
-
-    Returns
-    -------
-    eigenvalues : ndarray
-        Sorted eigenvalues.
-    eigenvectors : ndarray
-        Sorted eigenvectors.
-    """
-    indices = eigenvalues.argsort()[::-1]
     eigenvalues = eigenvalues[indices]
     eigenvectors = eigenvectors[:, indices]
-
     return eigenvalues, eigenvectors
 
 
 def _keep_positive_eigenvalues(eigenvalues, eigenvectors, n_components=None, remove_zero_eig=False):
-    """Filter non-positive eigencomponents.
-
-    Parameters
-    ----------
-    eigenvalues : ndarray
-        Eigenvalues.
-    eigenvectors : ndarray
-        Eigenvectors.
-    n_components : int, optional
-        Requested number of components.
-    remove_zero_eig : bool, default=False
-        Whether to remove zero eigenvalues.
-
-    Returns
-    -------
-    eigenvalues : ndarray
-        Filtered eigenvalues.
-    eigenvectors : ndarray
-        Filtered eigenvectors.
-    """
+    """Filter non-positive eigencomponents."""
     if remove_zero_eig or n_components is None:
         pos_mask = eigenvalues > 0
         eigenvectors = eigenvectors[:, pos_mask]
@@ -293,18 +188,7 @@ def _keep_positive_eigenvalues(eigenvalues, eigenvectors, n_components=None, rem
 
 
 def _remove_significant_negative_eigenvalues(lambdas):
-    """Clip significant negative eigenvalues to zero.
-
-    Parameters
-    ----------
-    lambdas : array-like
-        Eigenvalues.
-
-    Returns
-    -------
-    ndarray
-        Eigenvalues with significant negative entries removed.
-    """
+    """Clip significant negative eigenvalues to zero."""
     lambdas = np.array(lambdas)
     is_double_precision = lambdas.dtype == np.float64
     significant_neg_ratio = 1e-5 if is_double_precision else 5e-3
@@ -315,27 +199,13 @@ def _remove_significant_negative_eigenvalues(lambdas):
 
     significant_neg_eigvals_index = lambdas < -significant_neg_ratio * max_eig
     significant_neg_eigvals_index &= lambdas < -significant_neg_value
-
     lambdas[significant_neg_eigvals_index] = 0
 
     return lambdas
 
 
 def _scale_eigenvectors(eigenvalues, eigenvectors):
-    """Scale eigenvectors by the square root of eigenvalues.
-
-    Parameters
-    ----------
-    eigenvalues : ndarray
-        Eigenvalues.
-    eigenvectors : ndarray
-        Eigenvectors.
-
-    Returns
-    -------
-    ndarray
-        Scaled eigenvectors.
-    """
+    """Scale eigenvectors by the square root of eigenvalues."""
     s = np.sqrt(eigenvalues)
 
     non_zeros = np.flatnonzero(s)
@@ -346,31 +216,13 @@ def _scale_eigenvectors(eigenvalues, eigenvectors):
 
 
 class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin, BaseEstimator):
-    """Base class for kernel domain adaptation methods. Extendable to support different
-    kernel-based domain adaptation methods (e.g., MIDA, TCA, SCA).
+    """Base class for kernel domain adaptation methods.
 
-    Parameters
-    ----------
-        n_components (int, optional): Number of components to keep. If None, all components are kept. Defaults to None.
-        ignore_y (bool, optional): Whether to ignore the target variable `y` during fitting. Defaults to False.
-        augment (str, optional): Whether to augment the input data with factors. Can be "pre" (prepend factors),
-            "post" (append factors), or None (no augmentation). Defaults to None.
-        kernel (str or callable, optional): Kernel function to use. Can be "linear", "rbf", "poly", "sigmoid", or a callable. Defaults to "linear".
-        gamma (float, optional): Kernel coefficient for "rbf", "poly", and "sigmoid" kernels. If None, defaults to 1 / num_features. Defaults to None.
-        degree (int, optional): Degree of the polynomial kernel. Ignored by other kernels. Defaults to 3.
-        coef0 (float, optional): Independent term in the polynomial and sigmoid kernels. Ignored by other kernels. Defaults to 1.
-        kernel_params (dict, optional): Additional parameters for the kernel function. Defaults to None.
-        alpha (float, optional): Regularization parameter for the kernel. Defaults to 1.0.
-        fit_inverse_transform (bool, optional): Whether to fit the inverse transform for reconstruction. Defaults to False.
-        eigen_solver (str, optional): Eigenvalue solver to use. Can be "auto", "dense", "arpack", or "randomized". Defaults to "auto".
-        tol (float, optional): Tolerance for convergence of the eigenvalue solver. Defaults to 0.
-        max_iter (int, optional): Maximum number of iterations for the eigenvalue solver. If None, no limit is applied. Defaults to None.
-        iterated_power (int or str, optional): Number of iterations for the randomized solver. Can be an integer or "auto". Defaults to "auto".
-        remove_zero_eig (bool, optional): Whether to remove zero eigenvalues during postprocessing. Defaults to False.
-        scale_components (bool, optional): Whether to scale the components by the square root of their eigenvalues. Defaults to False.
-        random_state (int, np.random.RandomState, or None, optional): Random seed for reproducibility. Defaults to None.
-        copy (bool, optional): Whether to copy the input data during validation. Defaults to True.
-        n_jobs (int or None, optional): Number of jobs to run in parallel for pairwise kernel computations. Defaults to None.
+    Subclasses operate on a feature matrix ``X`` and optional ``covariates``.
+    Unless a ``covariate_encoder`` is configured, ``covariates`` must already
+    be numeric and in model-ready form. When an encoder is configured, raw
+    tabular covariates are accepted during :meth:`fit` and transformed
+    consistently during :meth:`transform`.
     """
 
     _parameter_constraints: dict = {
@@ -385,6 +237,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         "degree": [Interval(Real, 0, None, closed="left")],
         "coef0": [Interval(Real, None, None, closed="neither")],
         "kernel_params": [dict, None],
+        "covariate_encoder": [StrOptions({"onehot"}), HasMethods(["fit", "transform"]), None],
         "alpha": [Interval(Real, 0, None, closed="left")],
         "fit_inverse_transform": ["boolean"],
         "eigen_solver": [StrOptions({"auto", "dense", "arpack", "randomized"})],
@@ -419,6 +272,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         degree=3,
         coef0=1,
         kernel_params=None,
+        covariate_encoder=None,
         alpha=1.0,
         fit_inverse_transform=False,
         eigen_solver="auto",
@@ -431,37 +285,25 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         copy=True,
         n_jobs=None,
     ):
-        # Truncation parameters
         self.n_components = n_components
-
-        # Supervision parameters
         self.ignore_y = ignore_y
-
-        # Kernel parameters
         self.kernel = kernel
         self.kernel_params = kernel_params
+        self.covariate_encoder = covariate_encoder
         self.gamma = gamma
         self.degree = degree
         self.coef0 = coef0
         self.copy = copy
         self.n_jobs = n_jobs
-
-        # Eigendecomposition parameters
         self.eigen_solver = eigen_solver
         self.tol = tol
         self.max_iter = max_iter
         self.iterated_power = iterated_power
         self.remove_zero_eig = remove_zero_eig
         self.random_state = random_state
-
-        # Transform parameters
         self.scale_components = scale_components
-
-        # Inverse transform parameters
         self.alpha = alpha
         self.fit_inverse_transform = fit_inverse_transform
-
-        # Additional adaptation parameters
         self.augment = augment
 
     def _fit_inverse_transform(self, x_transformed, X):
@@ -476,10 +318,6 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
 
     @property
     def _n_features_out(self):
-        """Number of features out after transformation."""
-
-        # The property name can't be changed as it is used
-        # by scikit-learn's core module to validate.
         return self.eigenvalues_.shape[0]
 
     def __sklearn_tags__(self):
@@ -499,13 +337,12 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             params = self.kernel_params or {}
         else:
             params = {"gamma": self.gamma_, "degree": self.degree, "coef0": self.coef0}
+            if self.kernel_params is not None:
+                params.update(self.kernel_params)
         return pairwise_kernels(X, Y, metric=self.kernel, filter_params=True, n_jobs=self.n_jobs, **params)
 
     @property
     def orig_coef_(self):
-        """Coefficients projected to the original feature space
-        with shape (n_components, num_features).
-        """
         check_is_fitted(self)
         if self.kernel != "linear":
             raise NotImplementedError("Available only when `kernel=True`.")
@@ -514,22 +351,165 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             w = _scale_eigenvectors(self.eigenvalues_, w)
         return safe_sparse_dot(w.T, self.x_fit_)
 
-    def _fit_transform_in_place(self, x_kernel_matrix):
-        """Fit eigendecomposition on a precomputed kernel matrix.
+    def _requires_covariates(self):
+        return False
 
-        Parameters
-        ----------
-        x_kernel_matrix : ndarray
-            Kernel matrix used for eigendecomposition.
-        """
+    def _coerce_covariates_for_encoder(self, covariates):
+        covariates = np.asarray(covariates)
+        if covariates.ndim == 0 or covariates.ndim > 2:
+            raise ValueError("Covariates must be a 1D or 2D array-like object.")
+        if covariates.ndim == 1:
+            covariates = np.expand_dims(covariates, 1)
+        return covariates
+
+    def _to_dense_covariates(self, covariates):
+        if hasattr(covariates, "toarray"):
+            return covariates.toarray()
+        return covariates
+
+    def _fit_covariate_encoder(self, covariates):
+        if covariates is None:
+            self.covariate_encoder_ = None
+            return None
+
+        if self.covariate_encoder is None:
+            self.covariate_encoder_ = None
+            return covariates
+
+        covariates_to_encode = self._coerce_covariates_for_encoder(covariates)
+        if self.covariate_encoder == "onehot":
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        else:
+            encoder = clone(self.covariate_encoder)
+
+        encoder.fit(covariates_to_encode)
+        encoded_covariates = encoder.transform(covariates_to_encode)
+        self.covariate_encoder_ = encoder
+        return self._to_dense_covariates(encoded_covariates)
+
+    def _transform_covariates(self, covariates):
+        if covariates is None:
+            return None
+
+        encoder = getattr(self, "covariate_encoder_", None)
+        if encoder is None:
+            return covariates
+
+        covariates_to_encode = self._coerce_covariates_for_encoder(covariates)
+        encoded_covariates = encoder.transform(covariates_to_encode)
+        return self._to_dense_covariates(encoded_covariates)
+
+    def _validate_covariates(self, covariates, X):
+        if covariates is None:
+            if self._requires_covariates():
+                raise ValueError(f"Covariates must be provided for `{self.__class__.__name__}` during `fit`.")
+            return None, None
+
+        covariates = self._coerce_covariates_for_encoder(covariates)
+        if covariates.shape[0] != _num_samples(X):
+            raise ValueError("Covariates and X must have the same number of samples.")
+
+        covariate_dtype = covariates.dtype
+        if not (np.issubdtype(covariate_dtype, np.number) or np.issubdtype(covariate_dtype, np.bool_)):
+            raise ValueError(
+                "Covariates must be numeric when `covariate_encoder` is None. "
+                "Provide numeric covariates or set `covariate_encoder`."
+            )
+
+        factor_validator = FunctionTransformer(validate=False)
+        factor_validator.fit(covariates, X)
+        return factor_validator.transform(covariates), factor_validator
+
+    def _validate_transform_covariates(self, covariates, X):
+        if covariates is None:
+            return None
+
+        covariates = self._coerce_covariates_for_encoder(covariates)
+        if covariates.shape[0] != _num_samples(X):
+            raise ValueError("Covariates and X must have the same number of samples.")
+
+        covariate_dtype = covariates.dtype
+        if not (np.issubdtype(covariate_dtype, np.number) or np.issubdtype(covariate_dtype, np.bool_)):
+            raise ValueError("Transformed covariates must be numeric.")
+
+        if getattr(self, "covariates_fit_", None) is not None:
+            fit_covariates = self.covariates_fit_
+            expected_n_features = 1 if fit_covariates.ndim == 1 else fit_covariates.shape[1]
+            if covariates.shape[1] != expected_n_features:
+                raise ValueError(
+                    "Covariates during transform must match the fitted covariate feature dimension. "
+                    f"Expected {expected_n_features}, got {covariates.shape[1]}."
+                )
+
+        return covariates
+
+    def _get_unlabeled_value(self, y):
+        if np.issubdtype(np.asarray(y).dtype, np.number):
+            return -1
+        return "__unlabeled__"
+
+    def _encode_y_for_fit(self, y, n_samples, x_dtype, unlabeled_value=None):
+        if y is None or self.ignore_y:
+            return None, np.zeros((n_samples, 1), dtype=x_dtype), None
+
+        y = np.asarray(y)
+        if _num_samples(y) != n_samples:
+            raise ValueError("y and X must have the same number of samples.")
+
+        y_no_unlabeled = y
+        has_unlabeled = unlabeled_value is not None and np.any(y == unlabeled_value)
+        if has_unlabeled:
+            y_no_unlabeled = y[y != unlabeled_value]
+
+        if y_no_unlabeled.size > 0:
+            y_type = type_of_target(y_no_unlabeled)
+            if y_type not in ["binary", "multiclass"]:
+                raise ValueError(f"y should be a 'binary' or 'multiclass' target. Got '{y_type}' instead.")
+
+        drop = [unlabeled_value] if has_unlabeled else None
+        one_hot_encoder = OneHotEncoder(sparse_output=False, drop=drop)
+        y_encoded = one_hot_encoder.fit_transform(np.expand_dims(y, 1))
+
+        classes = one_hot_encoder.categories_[0]
+        if has_unlabeled:
+            classes = classes[classes != unlabeled_value]
+
+        return y, y_encoded, classes
+
+    def _prepare_fit_context(self, X, y=None, covariates=None, **fit_params):
+        y_fit, y_encoded, classes = self._encode_y_for_fit(y, _num_samples(X), X.dtype)
+        return KernelFitContext(
+            X_input=X,
+            X_fit=X,
+            covariates_input=covariates,
+            covariates_fit=covariates,
+            y_input=y,
+            y_fit=y_fit,
+            y_encoded=y_encoded,
+            classes=classes,
+        )
+
+    def _augment_data(self, X, covariates):
+        if self.augment == "pre":
+            return np.hstack((X, covariates))
+        return X
+
+    def _make_eigenproblem(self, x_kernel_matrix, context):
+        return x_kernel_matrix
+
+    def _get_eigenvalue_order(self):
+        return "descending"
+
+    def _fit_transform_in_place(self, eigenproblem):
         eigenvalues, eigenvectors = _eigendecompose(
-            x_kernel_matrix,
+            eigenproblem,
             self.n_components,
             self.eigen_solver,
             random_state=self.random_state,
             max_iter=self.max_iter,
             tol=self.tol,
             iterated_power=self.iterated_power,
+            eigenvalue_order=self._get_eigenvalue_order(),
         )
 
         eigenvalues, eigenvectors = _postprocess_eigencomponents(
@@ -538,133 +518,102 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
             self._eigen_preprocess_steps,
             n_components=self.n_components,
             remove_zero_eig=self.remove_zero_eig,
+            sort_order=self._get_eigenvalue_order(),
         )
 
-        self.eigenvalues_ = eigenvalues
-        self.eigenvectors_ = eigenvectors
-
-    def _make_objective_kernel(self, x_kernel_matrix, y, factors):
-        """Create the objective kernel for eigendecomposition.
-
-        Parameters
-        ----------
-        x_kernel_matrix : ndarray
-            Centered kernel matrix.
-        y : ndarray of shape (n_samples, n_classes)
-            Encoded labels.
-        factors : ndarray of shape (n_samples, n_factors)
-            Preprocessed adaptation factors.
-
-        Returns
-        -------
-        ndarray
-            Objective kernel.
-        """
-        return x_kernel_matrix
+        self.eigenvalues_ = np.real(eigenvalues)
+        self.eigenvectors_ = np.real(eigenvectors)
+        self.U = np.asarray(self.eigenvectors_, dtype=np.float64)
+        self.eig_values_ = np.asarray(self.eigenvalues_, dtype=np.float64)
 
     @_fit_context(prefer_skip_nested_validation=True)
-    def fit(self, X, y=None, group_labels=None, **fit_params):
-        """Fit the domain adapter.
+    def fit(self, X, y=None, covariates=None, **fit_params):
+        """Fit the adapter on ``X``.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Input data.
-        y : array-like of shape (n_samples,), optional
-            Target labels. Use ``-1`` for unknown labels in semi-supervised settings.
-        group_labels : array-like of shape (n_samples, n_factors), optional
-            Preprocessed grouping/domain factors.
+            Input features.
+        y : array-like of shape (n_samples,), default=None
+            Optional labels used by label-aware subclasses.
+        covariates : array-like, default=None
+            Auxiliary covariates aligned with ``X``. When
+            ``covariate_encoder is None``, covariates must already be numeric
+            and either 1D or 2D. When an encoder is configured, raw 1D or 2D
+            tabular covariates are accepted and encoded during fit.
         **fit_params : dict
-            Additional fit parameters for compatibility.
-
-        Returns
-        -------
-        self : BaseKernelDomainAdapter
-            Fitted estimator.
+            Subclass-specific fit parameters.
         """
-
-        # Data validation for X, y, and factors
         check_params = {
             "accept_sparse": False if self.fit_inverse_transform else "csr",
             "copy": self.copy,
         }
-        if y is None or self.ignore_y:
-            X = validate_data(self, X, **check_params)
-            y_one_hot = np.zeros((_num_samples(X), 1), dtype=X.dtype)
-        else:
-            X, y = validate_data(self, X, y, **check_params)
-            y_type = type_of_target(y)
+        X = validate_data(self, X, **check_params)
+        raw_covariates = covariates
+        covariates = self._fit_covariate_encoder(covariates)
+        covariates, factor_validator = self._validate_covariates(covariates, X)
 
-            if y_type not in ["binary", "multiclass"]:
-                raise ValueError(f"y should be a 'binary' or 'multiclass' target. Got '{y_type}' instead.")
+        context = self._prepare_fit_context(X, y=y, covariates=covariates, **fit_params)
+        context.covariates_input = raw_covariates
 
-            drop = (-1,) if np.any(y == -1) else None
-            one_hot_encoder = OneHotEncoder(sparse_output=False, drop=drop)
-            y_one_hot = one_hot_encoder.fit_transform(np.expand_dims(y, 1))
+        if context.classes is not None:
+            self.classes_ = context.classes
+        elif hasattr(self, "classes_"):
+            delattr(self, "classes_")
 
-            self.classes_ = one_hot_encoder.categories_[0]
-
-        if group_labels is None:
-            raise ValueError(f"Group labels must be provided for `{self.__class__.__name__}` during `fit`.")
-
-        # k_objective workaround to validate the group_labels' shape
-        factor_validator = FunctionTransformer()
-        factor_validator.fit(group_labels, X)
-        group_labels = factor_validator.transform(group_labels)
-
-        # Append the factors/phenotypes to the input data if augment=True
-        x_aug = X
-        if self.augment is not None:
+        if factor_validator is not None and self.augment is not None:
             self._factor_validator = factor_validator
+        elif hasattr(self, "_factor_validator"):
+            delattr(self, "_factor_validator")
 
-        if self.augment == "pre":
-            x_aug = np.hstack((X, group_labels))
+        self.x_fit_ = self._augment_data(context.X_fit, context.covariates_fit)
+        self.x_fit_raw_ = context.X_fit
+        self.covariates_input_ = raw_covariates
+        self.covariates_fit_ = context.covariates_fit
+        self.fit_context_ = context
+        self.X = context.X_fit
 
-        # To avoid having duplicate variables, x_fit_ cannot be renamed
-        # to x_fit_ as it is predefined in KernelPCA's implementation
-        self.x_fit_ = x_aug
         self.gamma_ = 1 / _num_features(X) if self.gamma is None else self.gamma
         self._centerer = KernelCenterer()
 
         x_fit_kernel_matrix = self._get_kernel(self.x_fit_)
         x_fit_kernel_matrix = self._centerer.fit_transform(x_fit_kernel_matrix)
 
-        k_objective = self._make_objective_kernel(x_fit_kernel_matrix, y_one_hot, group_labels)
+        eigenproblem = self._make_eigenproblem(x_fit_kernel_matrix, context)
+        self._fit_transform_in_place(eigenproblem)
 
-        # Fit the transformation and inverse transformation for the kernel matrix
-        self._fit_transform_in_place(k_objective)
         if self.fit_inverse_transform:
-            x_transformed = self.transform(X, group_labels)
-            self._fit_inverse_transform(x_transformed, X)
+            x_transformed = self.transform(context.X_input, covariates=context.covariates_input)
+            self._fit_inverse_transform(x_transformed, context.X_input)
 
         return self
 
-    def transform(self, X, group_labels=None):
-        """Project data to the adapted feature space.
+    def transform(self, X, covariates=None):
+        """Project new samples into the learned latent space.
 
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Input data.
-        group_labels : array-like of shape (n_samples, n_factors), optional
-            Group factors required when augmentation is enabled.
-
-        Returns
-        -------
-        z : ndarray of shape (n_samples, n_components)
-            Projected representation.
+            Input features.
+        covariates : array-like, default=None
+            Covariates aligned with ``X``. Provide them in the same raw format
+            used at fit time when ``covariate_encoder`` is configured, or in
+            the same numeric feature representation otherwise.
         """
         check_is_fitted(self)
         accept_sparse = False if self.fit_inverse_transform else "csr"
         X = validate_data(self, X, accept_sparse=accept_sparse, reset=False)
+        covariates = self._transform_covariates(covariates)
+        covariates = self._validate_transform_covariates(covariates, X)
 
-        if group_labels is None and self.augment in {"pre", "post"}:
-            raise ValueError("Factors must be provided for transform when `augment` is 'pre' or 'post'.")
+        if covariates is None and self.augment in {"pre", "post"}:
+            raise ValueError("Covariates must be provided for transform when `augment` is 'pre' or 'post'.")
 
-        if self.augment == "pre":
-            X = np.hstack((X, group_labels))
+        if covariates is not None and hasattr(self, "_factor_validator"):
+            covariates = self._factor_validator.transform(covariates)
 
-        x_fit_kernel_matrix = self._get_kernel(X, self.x_fit_)
+        X_query = self._augment_data(X, covariates)
+        x_fit_kernel_matrix = self._get_kernel(X_query, self.x_fit_)
         x_fit_kernel_matrix = self._centerer.transform(x_fit_kernel_matrix)
 
         w = self.eigenvectors_
@@ -674,23 +623,11 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         z = safe_sparse_dot(x_fit_kernel_matrix, w)
 
         if self.augment == "post":
-            z = np.hstack((z, group_labels))
+            z = np.hstack((z, covariates))
 
         return z
 
     def inverse_transform(self, z):
-        """Map projected features back to the original feature space.
-
-        Parameters
-        ----------
-        z : array-like of shape (n_samples, n_components)
-            Projected features.
-
-        Returns
-        -------
-        ndarray
-            Reconstructed samples in the original feature space.
-        """
         check_is_fitted(self)
         if not self.fit_inverse_transform:
             raise NotFittedError(
@@ -702,30 +639,195 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         k_z = self._get_kernel(z, self.x_transformed_fit_)
         return safe_sparse_dot(k_z, self.dual_coef_)
 
-    def fit_transform(self, X, y=None, group_labels=None, **fit_params):
-        """Fit the adapter and return transformed features.
+    def fit_transform(self, X, y=None, covariates=None, **fit_params):
+        self.fit(X, y=y, covariates=covariates, **fit_params)
+        return self.transform(X, covariates=covariates)
 
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Input data.
-        y : array-like of shape (n_samples,), optional
-            Target labels.
-        group_labels : array-like of shape (n_samples, n_factors), optional
-            Group/domain factors.
-        **fit_params : dict
-            Additional fit parameters.
 
-        Returns
-        -------
-        ndarray
-            Projected features.
-        """
-        if y is None:
-            # fit method of arity 1 (unsupervised transformation)
-            self.fit(X, group_labels=group_labels, **fit_params)
-        else:
-            # fit method of arity 2 (supervised transformation)
-            self.fit(X, y, group_labels, **fit_params)
+class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
+    """Shared base for MMD-based kernel domain adaptation methods.
 
-        return self.transform(X, group_labels)
+    ``covariates`` are interpreted as binary domain labels. They must contain
+    exactly two values during :meth:`fit`, one for the source domain and one
+    for the target domain. ``covariate_encoder`` is intentionally unsupported
+    because TCA and JDA expect domain labels rather than general side
+    information.
+    """
+
+    _parameter_constraints: dict = {
+        **BaseKernelDomainAdapter._parameter_constraints,
+        "lambda_": [Interval(Real, 0, None, closed="left")],
+    }
+
+    _eigen_preprocess_steps = ["svd_flip", "sort_eigencomponents"]
+
+    def __init__(
+        self,
+        n_components=None,
+        lambda_=1.0,
+        kernel="linear",
+        gamma=None,
+        degree=3,
+        coef0=1,
+        kernel_params=None,
+        covariate_encoder=None,
+        eigen_solver="auto",
+        tol=0,
+        max_iter=None,
+        iterated_power="auto",
+        remove_zero_eig=False,
+        scale_components=False,
+        random_state=None,
+        copy=True,
+        n_jobs=None,
+    ):
+        if covariate_encoder is not None:
+            raise ValueError(
+                "`covariate_encoder` is not supported for MMD-based adapters. "
+                "TCA and JDA expect binary domain covariates."
+            )
+        self.lambda_ = lambda_
+        super().__init__(
+            n_components=n_components,
+            ignore_y=False,
+            augment=None,
+            kernel=kernel,
+            gamma=gamma,
+            degree=degree,
+            coef0=coef0,
+            kernel_params=kernel_params,
+            covariate_encoder=None,
+            alpha=1.0,
+            fit_inverse_transform=False,
+            eigen_solver=eigen_solver,
+            tol=tol,
+            max_iter=max_iter,
+            iterated_power=iterated_power,
+            remove_zero_eig=remove_zero_eig,
+            scale_components=scale_components,
+            random_state=random_state,
+            copy=copy,
+            n_jobs=n_jobs,
+        )
+
+    def _validate_covariates(self, covariates, X):
+        if covariates is None:
+            return None, None
+
+        covariates = np.asarray(covariates)
+        if covariates.ndim == 0 or covariates.ndim > 2 or (covariates.ndim == 2 and covariates.shape[1] != 1):
+            raise ValueError(f"Covariates for {self.__class__.__name__} must be a 1D array of binary domain labels.")
+        covariates = covariates.reshape(-1)
+        if covariates.shape[0] != _num_samples(X):
+            raise ValueError("Covariates and X must have the same number of samples.")
+        if not np.array_equal(covariates, covariates.astype(bool)):
+            raise ValueError(f"Covariates for {self.__class__.__name__} should be binary values.")
+        if np.unique(covariates).size != 2:
+            raise ValueError(
+                f"Covariates for {self.__class__.__name__} must contain both source and target domain values."
+            )
+        return covariates, None
+
+    def _validate_transform_covariates(self, covariates, X):
+        if covariates is None:
+            return None
+
+        covariates = np.asarray(covariates)
+        if covariates.ndim == 0 or covariates.ndim > 2 or (covariates.ndim == 2 and covariates.shape[1] != 1):
+            raise ValueError(f"Covariates for {self.__class__.__name__} must be a 1D array of binary domain labels.")
+
+        covariates = covariates.reshape(-1)
+        if covariates.shape[0] != _num_samples(X):
+            raise ValueError("Covariates and X must have the same number of samples.")
+        if not np.array_equal(covariates, covariates.astype(bool)):
+            raise ValueError(f"Covariates for {self.__class__.__name__} should be binary values.")
+
+        return covariates
+
+    def _prepare_fit_context(self, X, y=None, covariates=None, target_covariate=None, **fit_params):
+        n_samples = _num_samples(X)
+        if covariates is None:
+            if y is not None:
+                raise ValueError(
+                    "Source and target indices are not defined. Please provide covariates and target_covariate."
+                )
+            _, y_encoded, classes = self._encode_y_for_fit(None, n_samples, X.dtype)
+            return KernelFitContext(
+                X_input=X,
+                X_fit=X,
+                y_encoded=y_encoded,
+                classes=classes,
+            )
+
+        unique_covariates = np.unique(covariates)
+        if target_covariate is None:
+            target_covariate = unique_covariates[0]
+        elif target_covariate not in unique_covariates:
+            raise ValueError("`target_covariate` must match one of the observed covariate values.")
+
+        target_idx = np.where(covariates == target_covariate)[0]
+        source_idx = np.where(covariates != target_covariate)[0]
+
+        X_fit = np.vstack((X[source_idx], X[target_idx]))
+        covariates_fit = np.concatenate((covariates[source_idx], covariates[target_idx]))
+        ns = source_idx.shape[0]
+        nt = target_idx.shape[0]
+
+        ys = None
+        yt = None
+        y_fit = None
+        classes = None
+        unlabeled_value = None
+        if y is not None:
+            y = np.asarray(y)
+            y_labeled_count = _num_samples(y)
+
+            if y_labeled_count == ns:
+                ys = y
+                target_labeled_pos = np.array([], dtype=int)
+            elif n_samples >= y_labeled_count > ns:
+                source_labeled_idx = source_idx[source_idx < y_labeled_count]
+                if source_labeled_idx.shape[0] != ns:
+                    raise ValueError("All source samples must be labeled when y includes target labels.")
+                ys = y[source_labeled_idx]
+                target_labeled_pos = np.flatnonzero(target_idx < y_labeled_count)
+                yt = y[target_idx[target_labeled_pos]] if target_labeled_pos.size > 0 else None
+            else:
+                raise ValueError("Number of labeled samples does not meet the required conditions.")
+
+            unlabeled_value = self._get_unlabeled_value(y)
+            y_fit = np.full(ns + nt, unlabeled_value, dtype=object)
+            y_fit[:ns] = ys
+            if yt is not None:
+                y_fit[ns + target_labeled_pos] = yt
+
+        y_fit, y_encoded, classes = self._encode_y_for_fit(y_fit, ns + nt, X.dtype, unlabeled_value=unlabeled_value)
+
+        return KernelFitContext(
+            X_input=X,
+            X_fit=X_fit,
+            covariates_input=covariates,
+            covariates_fit=covariates_fit,
+            y_input=y,
+            y_fit=y_fit,
+            y_encoded=y_encoded,
+            classes=classes,
+            source_idx=source_idx,
+            target_idx=target_idx,
+            ns=ns,
+            nt=nt,
+            ys=ys,
+            yt=yt,
+            target_covariate=target_covariate,
+        )
+
+    def _make_marginal_mmd_matrix(self, context):
+        if context.ns is None or context.nt is None or context.target_idx is None:
+            return np.zeros((context.X_fit.shape[0], context.X_fit.shape[0]))
+
+        mmd_matrix = mmd_coef(context.ns, context.nt, kind="marginal", mu=0)
+        mmd_matrix[np.isnan(mmd_matrix)] = 0
+        return mmd_matrix
+
+    def _get_eigenvalue_order(self):
+        return "ascending"

@@ -6,8 +6,9 @@ Knowledge-aware learning linear methods.
 This package contains implementations of the following methods:
 
 - Transformers (learning feature embeddings):
-  - Transfer Feature Learning with Joint Distribution Adaptation (JDA) [[Long et al., 2013]](http://openaccess.thecvf.com/content_iccv_2013/papers/Long_Transfer_Feature_Learning_2013_ICCV_paper.pdf). <!-- [[Matlab Code by Author]](http://ise.thss.tsinghua.edu.cn/~mlong/doc/joint-distribution-adaptation-iccv13.zip). -->
+  - Multilinear Principal component analysis (MPCA), Lu et al., 2008, available at [_IEEE_](https://ieeexplore.ieee.org/abstract/document/4359192) or [_Open Access_](https://ieeexplore.ieee.org/abstract/document/4359192).
   - Domain adaptation via transfer component analysis (TCA) [[Pan et al., 2009]](http://www.aaai.org/ocs/index.php/IJCAI/IJCAI-09/paper/download/294/962).
+  - Transfer Feature Learning with Joint Distribution Adaptation (JDA) [[Long et al., 2013]](http://openaccess.thecvf.com/content_iccv_2013/papers/Long_Transfer_Feature_Learning_2013_ICCV_paper.pdf). <!-- [[Matlab Code by Author]](http://ise.thss.tsinghua.edu.cn/~mlong/doc/joint-distribution-adaptation-iccv13.zip). -->
   - Balanced distribution adaptation (BDA) [[Wang et al., 2017]](http://jd92.wang/assets/files/a08_icdm17.pdf).
   - Maximum Independence Domain Adaptation (MIDA) [[Yan et al., 2017]](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7815350).
 - Estimators (learning classifiers):
