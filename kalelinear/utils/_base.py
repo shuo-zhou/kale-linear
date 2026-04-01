@@ -77,7 +77,7 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
                 et[np.where(yt_np == c)[0]] = -1.0 / np.where(yt_np == c)[0].shape[0]
             e = np.vstack((es, et))
             e[np.where(np.isinf(e))[0]] = 0
-            Mc = Mc + mu * np.dot(e, e.T)
+            Mc = Mc + np.dot(e, e.T)
         M = (1 - mu) * M + mu * Mc  # joint mmd coefficients
     return to_backend(M, backend, reference=ys if ys is not None else yt)
 

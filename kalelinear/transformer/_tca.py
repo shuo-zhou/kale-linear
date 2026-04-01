@@ -1,5 +1,5 @@
 # =============================================================================
-# @author: Shuo Zhou, The University of Sheffield, szhou20@sheffield.ac.uk
+# @author: Shuo Zhou, The University of Sheffield, shuo.zhou@sheffield.ac.uk
 # =============================================================================
 """Transfer Component Analysis (TCA)."""
 

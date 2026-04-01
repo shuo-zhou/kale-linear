@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from kalelinear.transformer import JDA, MIDA, TCA
+from kalelinear.transformer import BDA, JDA, MIDA, TCA
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def domain_adaptation_data():
     return xs, ys, xt, yt, x, y, binary_covariates, covariates
 
 
-@pytest.mark.parametrize("transformer_cls", [TCA, JDA])
+@pytest.mark.parametrize("transformer_cls", [TCA, JDA, BDA])
 def test_domain_transformers_fit_transform_shapes(transformer_cls, domain_adaptation_data):
     xs, ys, xt, yt, x, y, binary_covariates, _ = domain_adaptation_data
     transformer = transformer_cls(n_components=2)
@@ -80,14 +80,16 @@ def test_transformers_store_training_projection(domain_adaptation_data):
 
     tca = TCA(n_components=2).fit(x, y=y, covariates=binary_covariates, target_covariate=1)
     jda = JDA(n_components=2).fit(x, y=y, covariates=binary_covariates, target_covariate=1)
+    bda = BDA(n_components=2, mu=0.25).fit(x, y=y, covariates=binary_covariates, target_covariate=1)
     mida = MIDA(n_components=2).fit(x, y=y, covariates=covariates)
 
     assert tca.U.shape[0] == xs.shape[0] + xt.shape[0]
     assert jda.U.shape[0] == xs.shape[0] + xt.shape[0]
+    assert bda.U.shape[0] == xs.shape[0] + xt.shape[0]
     assert mida.U.shape[0] == xs.shape[0] + xt.shape[0]
 
 
-@pytest.mark.parametrize("transformer_cls", [TCA, JDA])
+@pytest.mark.parametrize("transformer_cls", [TCA, JDA, BDA])
 def test_mmd_transformers_reject_covariate_encoder(transformer_cls, domain_adaptation_data):
     _, _, _, _, _, _, _, _ = domain_adaptation_data
 
@@ -95,7 +97,7 @@ def test_mmd_transformers_reject_covariate_encoder(transformer_cls, domain_adapt
         transformer_cls(n_components=2, covariate_encoder="onehot")
 
 
-@pytest.mark.parametrize("transformer_cls", [TCA, JDA])
+@pytest.mark.parametrize("transformer_cls", [TCA, JDA, BDA])
 def test_mmd_transformers_require_both_domains(transformer_cls, domain_adaptation_data):
     _, _, _, _, x, _, _, _ = domain_adaptation_data
 
@@ -103,9 +105,22 @@ def test_mmd_transformers_require_both_domains(transformer_cls, domain_adaptatio
         transformer_cls(n_components=2).fit(x, covariates=np.zeros(x.shape[0], dtype=int))
 
 
-@pytest.mark.parametrize("transformer_cls", [TCA, JDA])
+@pytest.mark.parametrize("transformer_cls", [TCA, JDA, BDA])
 def test_mmd_transformers_validate_target_covariate(transformer_cls, domain_adaptation_data):
     _, _, _, _, x, _, binary_covariates, _ = domain_adaptation_data
 
     with pytest.raises(ValueError, match="target_covariate"):
         transformer_cls(n_components=2).fit(x, covariates=binary_covariates, target_covariate=2)
+
+
+def test_jda_does_not_accept_mu():
+    with pytest.raises(TypeError, match="mu"):
+        JDA(n_components=2, mu=0.5)
+
+
+@pytest.mark.parametrize("mu", [-0.1, 1.1])
+def test_bda_validates_mu(mu, domain_adaptation_data):
+    _, _, _, _, x, y, binary_covariates, _ = domain_adaptation_data
+
+    with pytest.raises(ValueError, match="mu"):
+        BDA(n_components=2, mu=mu).fit(x, y=y, covariates=binary_covariates, target_covariate=1)

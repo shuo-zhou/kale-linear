@@ -1,5 +1,5 @@
 # =============================================================================
-# Author: Shuo Zhou, szhou20@sheffield.ac.uk, The University of Sheffield
+# Author: Shuo Zhou, shuo.zhou@sheffield.ac.uk, The University of Sheffield
 # =============================================================================
 import numpy as np
 from numpy.linalg import multi_dot

@@ -650,7 +650,7 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
     ``covariates`` are interpreted as binary domain labels. They must contain
     exactly two values during :meth:`fit`, one for the source domain and one
     for the target domain. ``covariate_encoder`` is intentionally unsupported
-    because TCA and JDA expect domain labels rather than general side
+    because TCA, JDA, and BDA expect domain labels rather than general side
     information.
     """
 
@@ -684,7 +684,7 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
         if covariate_encoder is not None:
             raise ValueError(
                 "`covariate_encoder` is not supported for MMD-based adapters. "
-                "TCA and JDA expect binary domain covariates."
+                "TCA, JDA, and BDA expect binary domain covariates."
             )
         self.lambda_ = lambda_
         super().__init__(
