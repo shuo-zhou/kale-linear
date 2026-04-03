@@ -66,8 +66,10 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
     if kind == "joint" and ys_np is not None:
         Mc = 0  # conditional mmd coefficients
         class_all = np.unique(ys_np)
-        if yt_np is not None and class_all.all() != np.unique(yt_np).all():
-            raise ValueError("Source and target domain should have the same labels")
+        if yt_np is not None:
+            target_classes = np.unique(yt_np)
+            if not np.array_equal(class_all, target_classes):
+                raise ValueError("Source and target domain should have the same labels")
 
         for c in class_all:
             es = np.zeros([ns, 1])

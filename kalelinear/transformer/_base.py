@@ -345,7 +345,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
     def orig_coef_(self):
         check_is_fitted(self)
         if self.kernel != "linear":
-            raise NotImplementedError("Available only when `kernel=True`.")
+            raise NotImplementedError("Available only when `kernel='linear'`.")
         w = self.eigenvectors_
         if self.scale_components:
             w = _scale_eigenvectors(self.eigenvalues_, w)

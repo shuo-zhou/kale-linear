@@ -183,21 +183,51 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
         return y_pred
 
-    def get_params(self, **kwargs):
+    @property
+    def intercept_(self):
+        """Fitted intercept term.
+
+        Raises
+        ------
+        AttributeError
+            If the model has not been fitted yet.
+        """
+        if not hasattr(self, "theta") or self.theta is None:
+            raise AttributeError("This GSDA instance is not fitted yet. Call 'fit' before accessing 'intercept_'.")
+        return self.theta[0]
+
+    @property
+    def coef_(self):
+        """Fitted coefficients.
+
+        Raises
+        ------
+        AttributeError
+            If the model has not been fitted yet.
+        """
+        if not hasattr(self, "theta") or self.theta is None:
+            raise AttributeError("This GSDA instance is not fitted yet. Call 'fit' before accessing 'coef_'.")
+        return self.theta[1:]
+
+    def get_fitted_params(self):
         """Return fitted coefficients and intercept.
 
         Returns
         -------
         params : dict
             Dictionary with ``intercept`` and ``coef`` keys.
+
+        Raises
+        ------
+        RuntimeError
+            If the model has not been fitted yet.
         """
-        try:
-            params = dict()
-            params["intercept"] = self.theta[0]
-            params["coef"] = self.theta[1:]
-            return params
-        except self.theta is None:
-            raise Exception("Fit the model first!")
+        if not hasattr(self, "theta") or self.theta is None:
+            raise RuntimeError("This GSDA instance is not fitted yet. Call 'fit' before requesting fitted parameters.")
+        params = dict()
+        params["intercept"] = self.theta[0]
+        params["coef"] = self.theta[1:]
+        return params
 
     def _lbfgs_solver(self, X, y, groups, target_idx=None):
         """Optimize parameters using a limited-memory BFGS-like update.

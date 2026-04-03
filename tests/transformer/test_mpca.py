@@ -11,7 +11,11 @@ from kalelinear.transformer import MPCA
 N_COMPS = [1, 50, 100]
 VAR_RATIOS = [0.7, 0.95]
 relative_tol = 0.00001
-baseline_url = "https://github.com/pykale/data/raw/main/videos/gait/mpca_baseline.mat"
+
+
+@pytest.fixture(scope="module")
+def gait(download_path):
+    return loadmat(os.path.join(download_path, "gait.mat"))
 
 
 @pytest.fixture(scope="module")

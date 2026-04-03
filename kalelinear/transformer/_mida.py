@@ -59,7 +59,7 @@ class MIDA(BaseKernelDomainAdapter):
         scale_components=False,
         random_state=None,
         copy=True,
-        num_jobs=None,
+        n_jobs=None,
     ):
         self.mu = mu
         self.eta = eta
@@ -84,7 +84,7 @@ class MIDA(BaseKernelDomainAdapter):
             scale_components=scale_components,
             random_state=random_state,
             copy=copy,
-            n_jobs=num_jobs,
+            n_jobs=n_jobs,
         )
 
     def _requires_covariates(self):

@@ -3,7 +3,7 @@
 from io import open
 from os import path
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 # Dependencies with options for different user needs. If updating this, you may need to update docs/requirements.txt too.
 # If option names are changed, you need to update the installation guide at docs/source/installation.md respectively.
@@ -78,7 +78,7 @@ setup(
     author="Shuo Zhou",
     author_email="shuo.zhou@sheffield.ac.uk",
     license="MIT License",
-    packages=["kalelinear"],
+    packages=find_packages(),
     install_requires=install_requires,
     extras_require={
         "torch": torch_requires,
