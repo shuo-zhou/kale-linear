@@ -8,8 +8,10 @@ from scipy.special import expit
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 
-def simple_hsic(w, X, groups):
-    """Compute the simplified HSIC term.
+def simple_hsic_grad_term(w, X, groups):
+    """Compute the simplified HSIC gradient term.
+    Simplified HSIC is defined as w^T X^T H G G^T H X w, where H is the centering matrix and G is the group indicator matrix.
+    This function computes X^T H G G^T H X w, which is the part of the gradient that depends on the data, groups, and the model parameters w.
 
     Parameters
     ----------
@@ -22,8 +24,8 @@ def simple_hsic(w, X, groups):
 
     Returns
     -------
-    float
-        Simplified HSIC value.
+    array-like, shape (n_features,)
+        Simplified HSIC gradient term.
     """
     n = X.shape[0]
     centering_matrix = np.diag(np.ones(n)) - 1 / n
@@ -134,7 +136,8 @@ class GSDA(BaseEstimator, ClassifierMixin):
         groups = np.asarray(groups)
         if groups.ndim == 1:
             groups = groups.reshape((-1, 1))
-        self.theta = np.random.random(
+        rng = np.random if self.random_state is None else np.random.RandomState(self.random_state)
+        self.theta = rng.random(
             (X.shape[1] + 1),
         )
         X = np.concatenate((np.ones((X.shape[0], 1)), X), axis=1)
@@ -355,7 +358,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
         y_hat = expit(x_tgt @ self.theta)
         # n_feature = X.shape[1]
-        _simple_hsic = simple_hsic(self.theta, X, groups)
+        _simple_hsic = simple_hsic_grad_term(self.theta, X, groups)
         hsic_proba = expit(multi_dot((self.theta, _simple_hsic)) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 

@@ -20,8 +20,6 @@ class MIDA(BaseKernelDomainAdapter):
     Hilbert-Schmidt independence criterion (HSIC) with respect to the
     provided covariates.
 
-    To prevent label leakage, set target labels to ``-1``.
-
     ``covariates`` are required during :meth:`fit`. With
     ``covariate_encoder=None``, they must already be numeric and shaped as
     ``(n_samples,)`` or ``(n_samples, n_covariates)``. Use

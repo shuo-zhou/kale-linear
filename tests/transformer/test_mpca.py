@@ -15,12 +15,16 @@ relative_tol = 0.00001
 
 @pytest.fixture(scope="module")
 def gait(download_path):
-    return loadmat(os.path.join(download_path, "gait.mat"))
+    gait_data_path = os.path.join(download_path, "gait.mat")
+    assert os.path.exists(gait_data_path)
+    return loadmat(gait_data_path)
 
 
 @pytest.fixture(scope="module")
 def baseline_model(download_path):
-    return loadmat(os.path.join(download_path, "baseline.mat"))
+    baseline_data_path = os.path.join(download_path, "baseline.mat")
+    assert os.path.exists(baseline_data_path)
+    return loadmat(baseline_data_path)
 
 
 @pytest.mark.parametrize("n_components", N_COMPS)

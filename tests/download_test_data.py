@@ -20,5 +20,5 @@ def download_mpca_data(save_path):
     # Downloading MPCA data for tests/embed/test_factorization.py test
     url = "https://github.com/pykale/data/raw/main/videos/gait/mpca_baseline.mat"
     # Download the file and save it to the specified path
-    output_file = Path(save_path).joinpath("mpca_baseline.mat")
+    output_file = Path(save_path).joinpath("baseline.mat")
     urlretrieve(url, str(output_file))

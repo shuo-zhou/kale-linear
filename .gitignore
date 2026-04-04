@@ -33,7 +33,7 @@ log-*.txt
 # Testing
 .coverage
 cov*.xml
-tests/test_data
+# tests/test_data
 tests/*/tests
 
 # Lightning

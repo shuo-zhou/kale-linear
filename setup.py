@@ -78,7 +78,7 @@ setup(
     author="Shuo Zhou",
     author_email="shuo.zhou@sheffield.ac.uk",
     license="MIT License",
-    packages=find_packages(),
+    packages=find_packages(exclude=("tests*", "examples*", "docs*")),
     install_requires=install_requires,
     extras_require={
         "torch": torch_requires,

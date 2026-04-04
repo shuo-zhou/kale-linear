@@ -55,7 +55,7 @@ def _check_shape(X, shape_):
         If the sample shape of ``X`` does not match ``shape_``.
     """
     if not X.shape[1:] == shape_:
-        error_msg = "The expected shape of data is %s, but %s for given data" % (X.shape[1:], shape_)
+        error_msg = "The expected shape of data is %s, but %s for given data" % (shape_, X.shape[1:])
         logging.error(error_msg)
         raise ValueError(error_msg)
 
