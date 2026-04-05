@@ -107,9 +107,8 @@ def test_mida_augment(sample_data, augment):
     has_validator = hasattr(mida, "_factor_validator")
     if augment:
         assert has_validator, "MIDA must have `_factor_validator` after fitting when augment=True"
-        return
-
-    assert not has_validator, "MIDA must not have `_factor_validator` after fitting when augment=False"
+    else:
+        assert not has_validator, "MIDA must not have `_factor_validator` after fitting when augment=False"
 
     if augment == "post":
         z = mida.transform(x, covariates=covariates)

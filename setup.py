@@ -12,12 +12,13 @@ from setuptools import find_packages, setup
 
 # Core dependencies frequently used in the kalelinear API
 install_requires = [
-    "cvxopt",  # sure
-    "numpy>=1.18.0",  # sure
-    "osqp",  # sure
-    "pandas",  # sure
-    "scikit-learn>=0.23.2",  # sure
-    "scipy>=1.5.4",  # in factorization API only
+    "cvxopt",
+    "numpy",
+    "osqp",
+    "pandas",
+    "scikit-learn",
+    "scipy",
+    "tensorly",
 ]
 
 # Optional dependency for tensor input/output interoperability.
