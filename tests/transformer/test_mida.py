@@ -42,7 +42,7 @@ def test_mida_shape_consistency(sample_data, num_components):
         testing.assert_equal(z.shape, (len(x), num_components))
 
     # Transform the source and target domain data separately
-    (source_mask,) = np.where(domains != 0)
+    source_mask = domains != 0  # return True/false mask instead of indices
     z_src = mida.transform(x[source_mask], covariates=covariates[source_mask])
     z_tgt = mida.transform(x[~source_mask], covariates=covariates[~source_mask])
     # Check if transformations are consistent with separate domains

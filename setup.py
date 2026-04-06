@@ -30,7 +30,7 @@ torch_requires = [
 example_requires = [
     "ipykernel",
     "ipython",
-    "matplotlib<=3.5.2",
+    "matplotlib",
     "nilearn",
     "seaborn",
     "yacs>=0.1.7",
