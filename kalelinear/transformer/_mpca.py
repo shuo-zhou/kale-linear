@@ -201,10 +201,6 @@ class MPCA(BaseEstimator, TransformerMixin):
                     break
             proj_mats.append(singular_vec_left[:, idx_sorted][:, : shape_out[i - 1]].T)
 
-        # set n_components to the maximum n_features if it is None
-        if self.n_components is None:
-            self.n_components = int(np.prod(shape_out))
-
         for i_iter in range(self.max_iter):
             for i in range(1, n_dims):  # ith mode
                 x_projected = multi_mode_dot(
@@ -256,17 +252,20 @@ class MPCA(BaseEstimator, TransformerMixin):
         # projected tensor in lower dimensions
         x_projected = multi_mode_dot(X, self.proj_mats, modes=[m for m in range(1, self.n_dims)])
 
+        n_components = self.n_components
         if self.vectorize:
             x_projected = unfold(x_projected, mode=0)
             x_projected = x_projected[:, self.idx_order]
-            if isinstance(self.n_components, int):
+            if isinstance(n_components, int):
                 n_features = int(np.prod(self.shape_out))
-                if self.n_components > n_features:
-                    self.n_components = n_features
-                    warn_msg = "n_components exceeds the maximum number, all features will be returned."
+                if n_components > n_features:
+                    warn_msg = (
+                        "n_components %d exceeds the maximum number, all features will be returned." % n_components
+                    )
                     logging.warning(warn_msg)
                     warnings.warn(warn_msg)
-                x_projected = x_projected[:, : self.n_components]
+                    n_components = n_features
+                x_projected = x_projected[:, :n_components]
 
         return x_projected
 
