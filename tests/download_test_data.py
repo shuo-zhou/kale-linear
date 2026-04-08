@@ -22,3 +22,9 @@ def download_mpca_data(save_path):
     # Download the file and save it to the specified path
     output_file = Path(save_path).joinpath("baseline.mat")
     urlretrieve(url, str(output_file))
+
+
+if __name__ == "__main__":
+    path_to_test_data = download_path()
+    download_gait_gallery_data(path_to_test_data)
+    download_mpca_data(path_to_test_data)

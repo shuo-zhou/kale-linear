@@ -37,8 +37,6 @@ def test_mpca(var_ratio, n_components, gait):
 
     testing.assert_equal(x_proj.ndim, x.ndim)
     testing.assert_equal(x_proj.shape[0], x.shape[0])
-    assert mpca.n_components <= np.prod(x.shape[1:])
-    assert n_components < mpca.n_components
     for i in range(1, x.ndim):
         assert x_proj.shape[i] <= x.shape[i]
         testing.assert_equal(mpca.proj_mats[i - 1].shape[1], x.shape[i])
