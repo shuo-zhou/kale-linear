@@ -21,7 +21,7 @@ known_first_party = [
 known_third_party = [
     "matplotlib",
     "numpy",
-    "setuptools==74.1.0",
+    "setuptools",
     "sphinx_rtd_theme",
     "torch",
 ]

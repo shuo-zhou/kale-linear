@@ -40,8 +40,7 @@ Install optional PyTorch tensor interoperability support:
 pip install "kalelinear[torch]"
 ```
 
-The library computes with NumPy and scikit-learn internally. Installing `torch` lets you pass `torch.Tensor`
-inputs and receive `torch.Tensor` outputs, but it does not switch the numerical kernels to native PyTorch.
+The library computes with NumPy and scikit-learn internally. Installing `torch` enables `torch.Tensor` interoperability for supported APIs, but it does not switch the numerical kernels to native PyTorch. In particular, some estimators round-trip `torch.Tensor` inputs and outputs, while transformer APIs that rely on scikit-learn validation may still return NumPy arrays.
 
 <!--
 ### Scikit-learn Style Implementation

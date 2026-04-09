@@ -16,7 +16,7 @@ install_requires = [
     "numpy",
     "osqp",
     "pandas",
-    "scikit-learn",
+    "scikit-learn>=1.6.0",
     "scipy",
     "tensorly",
 ]
@@ -41,7 +41,7 @@ full_requires = install_requires + example_requires
 
 # Additional dependencies for development
 dev_requires = full_requires + [
-    "black==19.10b0",
+    "black=23.11.0",
     "coverage",
     "flake8",
     "flake8-print",
