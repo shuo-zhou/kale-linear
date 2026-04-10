@@ -53,6 +53,38 @@ def test_coir_svm_solvers_fit_consistently(office_test_data):
         assert set(np.unique(y_pred)).issubset(set(np.unique(y)))
 
 
+def test_coir_svm_none_covariates_matches_zero_covariates(office_test_data):
+    x, _, tgt_idx, _, x_train, _, y_train = _split_source_target(office_test_data)
+    zero_covariates = np.zeros((x_train.shape[0], 1))
+
+    clf_none = estimator.CoIRSVM().fit(x_train, y_train, covariates=None)
+    clf_zero = estimator.CoIRSVM().fit(x_train, y_train, covariates=zero_covariates)
+
+    dec_none = clf_none.decision_function(x[tgt_idx])
+    dec_zero = clf_zero.decision_function(x[tgt_idx])
+    pred_none = clf_none.predict(x[tgt_idx])
+    pred_zero = clf_zero.predict(x[tgt_idx])
+
+    assert np.allclose(dec_none, dec_zero)
+    assert np.array_equal(pred_none, pred_zero)
+
+
+def test_coir_ls_none_covariates_matches_zero_covariates(office_test_data):
+    x, _, tgt_idx, _, x_train, _, y_train = _split_source_target(office_test_data)
+    zero_covariates = np.zeros((x_train.shape[0], 1))
+
+    clf_none = estimator.CoIRLS().fit(x_train, y_train, covariates=None)
+    clf_zero = estimator.CoIRLS().fit(x_train, y_train, covariates=zero_covariates)
+
+    dec_none = clf_none.decision_function(x[tgt_idx])
+    dec_zero = clf_zero.decision_function(x[tgt_idx])
+    pred_none = clf_none.predict(x[tgt_idx])
+    pred_zero = clf_zero.predict(x[tgt_idx])
+
+    assert np.allclose(dec_none, dec_zero)
+    assert np.array_equal(pred_none, pred_zero)
+
+
 @pytest.mark.parametrize("estimator_cls", [estimator.CoIRSVM, estimator.CoIRLS])
 def test_coir_estimators_predict_labels(estimator_cls, office_test_data):
     x, y, tgt_idx, src_idx, x_train, c_train, y_train = _split_source_target(office_test_data)
@@ -99,6 +131,29 @@ def test_manifold_estimators_predict_labels(estimator_cls, office_test_data):
     assert decision.shape[0] == len(tgt_idx[0])
     assert y_pred.shape == y[tgt_idx].shape
     assert 0 <= acc <= 1
+
+
+def test_gsda_fit_predicts_target_labels(office_test_data):
+    x, y, z, covariate_mat = office_test_data
+    target_idx = np.where(z == 0)[0]
+
+    clf = estimator.GSDA(max_iter=25, random_state=0)
+    clf.fit(x, y[target_idx], covariate_mat, target_idx=target_idx)
+
+    y_proba = clf.predict_proba(x[target_idx])
+    y_pred = clf.predict(x[target_idx])
+    params = clf.get_fitted_params()
+
+    assert clf.coef_.shape == (x.shape[1],)
+    assert params["coef"].shape == (x.shape[1],)
+    assert np.isfinite(clf.coef_).all()
+    assert np.isfinite(clf.intercept_)
+    assert y_proba.shape == y[target_idx].shape
+    assert y_pred.shape == y[target_idx].shape
+    assert np.all((0 <= y_proba) & (y_proba <= 1))
+    assert set(np.unique(y_pred)).issubset({0.0, 1.0})
+    assert len(clf.losses["time"]) == 1
+    assert len(clf.losses["ovr"]) > 0
 
 
 def test_laprls_supports_torch_backend(office_test_data):

@@ -41,7 +41,7 @@ full_requires = install_requires + example_requires
 
 # Additional dependencies for development
 dev_requires = full_requires + [
-    "black=23.11.0",
+    "black==23.11.0",
     "coverage",
     "flake8",
     "flake8-print",

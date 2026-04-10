@@ -188,7 +188,7 @@ class ARSVM(BaseFramework):
         -------
         array-like
             decision scores, , shape (n_samples,) for binary classification,
-            (n_samples, n_class) for multi-class cases
+            (n_samples, n_classes) for multi-class cases
         """
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")

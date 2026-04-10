@@ -87,9 +87,11 @@ class CoIRSVM(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label, shape (nl_samples, ) where nl_samples <= n_samples
-        covariates : array-like,
-            Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
+            Label, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
+        covariates : array-like, optional
+            Domain covariate matrix for input data, shape (n_samples, n_covariates).
+            If ``None``, the covariate-independence term is disabled, so with
+            ``mu=0`` the objective degenerates to the standard kernel SVM form.
 
         Returns
         -------
@@ -101,7 +103,10 @@ class CoIRSVM(BaseFramework):
         y = to_numpy(y)
         covariates = to_numpy(covariates)
         x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
-        c_kernel_matrix = np.dot(covariates, covariates.T)
+        if isinstance(covariates, np.ndarray):
+            c_kernel_matrix = np.dot(covariates, covariates.T)
+        else:
+            c_kernel_matrix = np.zeros((n, n))
         y_ = self._lb.fit_transform(y)
 
         Q_ = unit_matrix.copy()
@@ -160,7 +165,7 @@ class CoIRSVM(BaseFramework):
         -------
         array-like
             decision scores, shape (n_samples,) for binary classification,
-            (n_samples, n_class) for multi-class cases
+            (n_samples, n_classes) for multi-class cases
         """
         backend = infer_backend(X)
         x_np = to_numpy(X)
@@ -199,9 +204,11 @@ class CoIRSVM(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label, shape (nl_samples, ) where nl_samples <= n_samples
-        covariates : array-like,
-            Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
+            Label, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
+        covariates : array-like, optional
+            Domain covariate matrix for input data, shape (n_samples, n_covariates).
+            If ``None``, the covariate-independence term is disabled, so with
+            ``mu=0`` the objective degenerates to the standard kernel least-squares form.
 
         Returns
         -------
@@ -277,9 +284,9 @@ class CoIRLS(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label, shape (nl_samples, ) where nl_samples <= n_samples
+            Label, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
         covariates : array-like,
-            Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
 
         Returns
         -------
@@ -293,7 +300,7 @@ class CoIRLS(BaseFramework):
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
         x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
-        if type(covariates) is np.ndarray:
+        if isinstance(covariates, np.ndarray):
             c_kernel_matrix = np.dot(covariates, covariates.T)
         else:
             c_kernel_matrix = np.zeros((n, n))
@@ -335,7 +342,7 @@ class CoIRLS(BaseFramework):
         -------
         array-like
             decision scores, shape (n_samples,) for binary classification,
-            (n_samples, n_class) for multi-class cases
+            (n_samples, n_classes) for multi-class cases
         """
         backend = infer_backend(X)
         x_np = to_numpy(X)
@@ -375,9 +382,9 @@ class CoIRLS(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label, shape (nl_samples, ) where nl_samples <= n_samples
+            Label, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
         covariates : array-like,
-            Domain co-variate matrix for input data, shape (n_samples, n_co-variates)
+            Domain covariate matrix for input data, shape (n_samples, n_covariates)
 
         Returns
         -------

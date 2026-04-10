@@ -75,7 +75,7 @@ class LapSVM(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label,, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
 
         Returns
         -------
@@ -121,7 +121,7 @@ class LapSVM(BaseFramework):
         -------
         array-like
             decision scores, shape (n_samples,) for binary classification,
-            (n_samples, n_class) for multi-class cases
+            (n_samples, n_classes) for multi-class cases
         """
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")
@@ -164,7 +164,7 @@ class LapSVM(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label,, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
 
         Returns
         -------
@@ -229,7 +229,7 @@ class LapRLS(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label,, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
 
         Returns
         -------
@@ -294,7 +294,7 @@ class LapRLS(BaseFramework):
         -------
         array-like
             decision scores, shape (n_samples,) for binary classification,
-            (n_samples, n_class) for multi-class cases
+            (n_samples, n_classes) for multi-class cases
         """
         backend = infer_backend(X)
         x_np = to_numpy(X)
@@ -311,7 +311,7 @@ class LapRLS(BaseFramework):
         X : array-like
             Input data, shape (n_samples, n_features)
         y : array-like
-            Label,, shape (nl_samples, ) where nl_samples <= n_samples
+            Label,, shape (n_labeled_samples, ) where n_labeled_samples <= n_samples
 
         Returns
         -------

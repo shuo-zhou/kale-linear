@@ -83,8 +83,8 @@ def test_mida_support_kernel(sample_data, kernel):
 
     is_linear = kernel == "linear"
     try:
-        has_orig_coef = hasattr(mida, "orig_coef_")
-        assert has_orig_coef, "MIDA must have `orig_coef_` after fitting when kernel='linear'"
+        # mida.orig_coef_ is expected to be an ndarray
+        assert isinstance(mida.orig_coef_, np.ndarray), "MIDA's `orig_coef_` must be a numpy array when kernel='linear'"
     except NotImplementedError:
         assert not is_linear, "MIDA must not have `orig_coef_` after fitting when kernel!='linear'"
 
