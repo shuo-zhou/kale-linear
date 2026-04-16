@@ -5,7 +5,8 @@ import numpy as np
 # import torch
 from numpy.linalg import multi_dot
 from scipy.special import expit
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, check_is_fitted, ClassifierMixin
+from sklearn.exceptions import NotFittedError
 
 
 def simple_hsic_grad_term(w, X, groups):
@@ -136,6 +137,11 @@ class GSDA(BaseEstimator, ClassifierMixin):
         groups = np.asarray(groups)
         if groups.ndim == 1:
             groups = groups.reshape((-1, 1))
+        existing_losses = getattr(self, "losses", None)
+        if isinstance(existing_losses, dict):
+            self.losses = {key: [] for key in existing_losses}
+        else:
+            self.losses = {"time": []}
         rng = np.random if self.random_state is None else np.random.RandomState(self.random_state)
         self.theta = rng.random(
             (X.shape[1] + 1),
@@ -165,6 +171,10 @@ class GSDA(BaseEstimator, ClassifierMixin):
         probs : ndarray of shape (n_samples,)
             Positive-class probabilities.
         """
+        check_is_fitted(self)
+        if getattr(self, "theta", None) is None:
+            raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
+
         return expit((X @ self.theta[1:]) + self.theta[0])
 
     def predict(self, X):

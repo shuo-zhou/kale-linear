@@ -32,5 +32,6 @@ def to_backend(value, backend, reference=None):
         if torch is None:
             raise ImportError("Torch tensor interoperability requested but torch is not installed.")
         device = reference.device if is_torch_tensor(reference) else None
-        return torch.as_tensor(value, device=device)
+        dtype = reference.dtype if is_torch_tensor(reference) else None
+        return torch.as_tensor(value, device=device, dtype=dtype)
     return np.asarray(value)

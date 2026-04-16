@@ -16,14 +16,16 @@ relative_tol = 0.00001
 @pytest.fixture(scope="module")
 def gait(download_path):
     gait_data_path = os.path.join(download_path, "gait.mat")
-    assert os.path.exists(gait_data_path)
+    if not os.path.exists(gait_data_path):
+        pytest.skip("Gait data not found, skipping tests.")
     return loadmat(gait_data_path)
 
 
 @pytest.fixture(scope="module")
 def baseline_model(download_path):
     baseline_data_path = os.path.join(download_path, "baseline.mat")
-    assert os.path.exists(baseline_data_path)
+    if not os.path.exists(baseline_data_path):
+        pytest.skip("Baseline data not found, skipping test_mpca_against_baseline.")
     return loadmat(baseline_data_path)
 
 
