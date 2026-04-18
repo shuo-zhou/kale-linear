@@ -29,7 +29,7 @@ def simple_hsic_grad_term(w, X, groups):
         Simplified HSIC gradient term.
     """
     n = X.shape[0]
-    centering_matrix = np.diag(np.ones(n)) - 1 / n
+    centering_matrix = np.eye(n) - np.ones((n, n)) / n
 
     return multi_dot((X.T, centering_matrix, groups, groups.T, centering_matrix, X, w))
 
@@ -81,7 +81,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
     Attributes
     ----------
-    theta : ndarray of shape (n_features + 1,)
+    theta_ : ndarray of shape (n_features + 1,)
         Model parameters where the first entry is the intercept.
     losses : dict
         Optimization history for objective, prediction, HSIC loss, and runtime.
@@ -106,7 +106,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         self.alpha = l2_hparam
         self.tolerance_grad = tolerance_grad
         self.tolerance_change = tolerance_change
-        self.theta = None
+        self.theta_ = None
         self.lambda_ = lambda_
         self.losses = {"ovr": [], "pred": [], "hsic": [], "time": []}
         self.optimizer = optimizer
@@ -124,7 +124,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
             Binary labels for optimization.
         groups : array-like of shape (n_samples,) or (n_samples, n_groups)
             Group/domain indicators used by the HSIC term.
-        target_idx : array-like of shape (n_target,), optional
+        target_idx : array-like of shape (n_target_samples,), optional
             Indices indicating target samples. If ``None``, the first ``len(y)`` rows are used.
 
         Returns
@@ -133,17 +133,21 @@ class GSDA(BaseEstimator, ClassifierMixin):
             Fitted estimator.
         """
         X = np.asarray(X)
+        n_samples = X.shape[0]
         y = np.asarray(y)
         groups = np.asarray(groups)
+        # ensure X, y, and groups have compatible shapes
+        if n_samples != y.shape[0] or n_samples != groups.shape[0]:
+            raise ValueError("Mismatched number of samples between X, y, and groups.")
         if groups.ndim == 1:
             groups = groups.reshape((-1, 1))
         existing_losses = getattr(self, "losses", None)
         if isinstance(existing_losses, dict):
             self.losses = {key: [] for key in existing_losses}
         else:
-            self.losses = {"time": []}
+            self.losses = {"ovr": [], "pred": [], "hsic": [], "time": []}
         rng = np.random if self.random_state is None else np.random.RandomState(self.random_state)
-        self.theta = rng.random(
+        self.theta_ = rng.random(
             (X.shape[1] + 1),
         )
         X = np.concatenate((np.ones((X.shape[0], 1)), X), axis=1)
@@ -172,10 +176,10 @@ class GSDA(BaseEstimator, ClassifierMixin):
             Positive-class probabilities.
         """
         check_is_fitted(self)
-        if getattr(self, "theta", None) is None:
+        if getattr(self, "theta_", None) is None:
             raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
 
-        return expit((X @ self.theta[1:]) + self.theta[0])
+        return expit((X @ self.theta_[1:]) + self.theta_[0])
 
     def predict(self, X):
         """Predict binary class labels.
@@ -205,9 +209,9 @@ class GSDA(BaseEstimator, ClassifierMixin):
         AttributeError
             If the model has not been fitted yet.
         """
-        if not hasattr(self, "theta") or self.theta is None:
+        if not hasattr(self, "theta_") or self.theta_ is None:
             raise AttributeError("This GSDA instance is not fitted yet. Call 'fit' before accessing 'intercept_'.")
-        return self.theta[0]
+        return self.theta_[0]
 
     @property
     def coef_(self):
@@ -218,9 +222,9 @@ class GSDA(BaseEstimator, ClassifierMixin):
         AttributeError
             If the model has not been fitted yet.
         """
-        if not hasattr(self, "theta") or self.theta is None:
+        if not hasattr(self, "theta_") or self.theta_ is None:
             raise AttributeError("This GSDA instance is not fitted yet. Call 'fit' before accessing 'coef_'.")
-        return self.theta[1:]
+        return self.theta_[1:]
 
     def get_fitted_params(self):
         """Return fitted coefficients and intercept.
@@ -235,11 +239,11 @@ class GSDA(BaseEstimator, ClassifierMixin):
         RuntimeError
             If the model has not been fitted yet.
         """
-        if not hasattr(self, "theta") or self.theta is None:
+        if not hasattr(self, "theta_") or self.theta_ is None:
             raise RuntimeError("This GSDA instance is not fitted yet. Call 'fit' before requesting fitted parameters.")
         params = dict()
-        params["intercept"] = self.theta[0]
-        params["coef"] = self.theta[1:]
+        params["intercept"] = self.theta_[0]
+        params["coef"] = self.theta_[1:]
         return params
 
     def _lbfgs_solver(self, X, y, groups, target_idx=None):
@@ -259,13 +263,13 @@ class GSDA(BaseEstimator, ClassifierMixin):
         Returns
         -------
         self : GSDA
-            Estimator with updated ``theta``.
+            Estimator with updated ``theta_``.
         """
         delta_theta = []  # Δx
         delta_grads = []  # Δgrad
 
         grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
-        theta_old = self.theta.copy()
+        theta_old = self.theta_.copy()
         grad_old = grad.copy()
 
         for _ in range(self.max_iter):
@@ -280,13 +284,13 @@ class GSDA(BaseEstimator, ClassifierMixin):
 
                 gamma_k = delta_theta[-1].dot(delta_grads[-1]) / delta_grads[-1].dot(delta_grads[-1])
 
-                z = (gamma_k * np.eye(self.theta.shape[0])) @ q
+                z = (gamma_k * np.eye(self.theta_.shape[0])) @ q
 
                 for i in range(len(delta_theta)):
                     beta_i = delta_grads[i].dot(z) / delta_grads[i].dot(delta_theta[i])
                     z += delta_theta[i] * (alphas[len(alphas) - 1 - i] - beta_i)
             else:
-                z = np.eye(self.theta.shape[0]) @ q
+                z = np.eye(self.theta_.shape[0]) @ q
             # Line search and update x
             # Implement a line search algorithm to find an appropriate step size
             # step_size = 1  # Placeholder
@@ -298,10 +302,10 @@ class GSDA(BaseEstimator, ClassifierMixin):
             if _ > 0 and _ % 10 == 0 and self.lr > 0.001:
                 self.lr *= 0.8
 
-            self.theta = theta_old - z * self.lr
+            self.theta_ = theta_old - z * self.lr
 
-            delta_theta.append(self.theta - theta_old)
-            theta_old = self.theta.copy()
+            delta_theta.append(self.theta_ - theta_old)
+            theta_old = self.theta_.copy()
 
             # Update gradient
             grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
@@ -335,7 +339,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         Returns
         -------
         self : GSDA
-            Estimator with updated ``theta``.
+            Estimator with updated ``theta_``.
         """
         for _ in range(self.max_iter):
             delta_grad, pred_log_loss, hsic_log_loss = self.compute_gsda_gradient(X, y, groups, target_idx)
@@ -352,7 +356,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
                 self.lr *= 0.8
 
             if not self._terminate_grad(delta_grad):
-                self.theta -= self.lr * delta_grad
+                self.theta_ -= self.lr * delta_grad
             else:
                 break
 
@@ -366,14 +370,14 @@ class GSDA(BaseEstimator, ClassifierMixin):
         else:
             x_tgt = X[target_idx]
 
-        y_hat = expit(x_tgt @ self.theta)
+        y_hat = expit(x_tgt @ self.theta_)
         # n_feature = X.shape[1]
-        _simple_hsic = simple_hsic_grad_term(self.theta, X, groups)
-        hsic_proba = expit(multi_dot((self.theta, _simple_hsic)) / np.square(n_sample - 1))
+        _simple_hsic = simple_hsic_grad_term(self.theta_, X, groups)
+        hsic_proba = expit(multi_dot((self.theta_, _simple_hsic)) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 
         if self.regularization is not None:
-            delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt + self.theta * self.alpha + self.lambda_ * grad_hsic
+            delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt + self.theta_ * self.alpha + self.lambda_ * grad_hsic
         else:
             delta_grad = x_tgt.T @ (y_hat - y)
 
