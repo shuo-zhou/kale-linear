@@ -5,8 +5,9 @@ import numpy as np
 # import torch
 from numpy.linalg import multi_dot
 from scipy.special import expit
-from sklearn.base import BaseEstimator, check_is_fitted, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
+from sklearn.utils.validation import check_is_fitted
 
 
 def simple_hsic_grad_term(w, X, groups):
@@ -137,8 +138,10 @@ class GSDA(BaseEstimator, ClassifierMixin):
         y = np.asarray(y)
         groups = np.asarray(groups)
         # ensure X, y, and groups have compatible shapes
-        if n_samples != y.shape[0] or n_samples != groups.shape[0]:
+        if n_samples < y.shape[0] or n_samples != groups.shape[0]:
             raise ValueError("Mismatched number of samples between X, y, and groups.")
+        if isinstance(target_idx, (list, np.ndarray)) and len(target_idx) > y.shape[0]:
+            raise ValueError("Length of target_idx cannot exceed number of target samples.")
         if groups.ndim == 1:
             groups = groups.reshape((-1, 1))
         existing_losses = getattr(self, "losses", None)

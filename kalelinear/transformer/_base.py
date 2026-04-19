@@ -739,8 +739,8 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
         covariates = covariates.reshape(-1)
         if covariates.shape[0] != _num_samples(X):
             raise ValueError("Covariates and X must have the same number of samples.")
-        if not np.array_equal(covariates, covariates.astype(bool)):
-            raise ValueError(f"Covariates for {self.__class__.__name__} should be binary values.")
+        if not (np.issubdtype(covariates.dtype, np.number) or np.issubdtype(covariates.dtype, np.bool_)):
+            raise ValueError(f"Covariates for {self.__class__.__name__} should be numeric or boolean domain labels.")
 
         return covariates
 
