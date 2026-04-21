@@ -46,8 +46,9 @@ The library computes with NumPy and scikit-learn internally. Installing `torch` 
 ### Scikit-learn Style Implementation
 
 ##### Learning low-dimensional embedding for input data `X`
+
 ```
-From kalelinear.transformer.tca import TCA
+from kalelinear.transformer.tca import TCA
 
 transformer = TCA(n_components=2)
 X_transformed = transformer.fit_transform(X)
@@ -56,9 +57,10 @@ X_transformed = transformer.fit_transform(X)
 ##### Training classifier for labelled source data (`Xs`, `ys`), and unlabelled target data `Xt`.
 
 Example 1: Using Manifold Regularisation Learning Framework
+
 ```
 import numpy as np
-From kalelinear.estimator.manifold_learn import LapSVM
+from kalelinear.estimator.manifold_learn import LapSVM
 
 clf = LapSVM()
 clf.fit(np.concatnate((Xs, Xt)), ys)
@@ -66,8 +68,9 @@ y_pred = clf.predict(Xt)
 ```
 
 Example 2: Using Adaptation Regularisation Learning Framework
+
 ```
-From kalelinear.estimator.artl import ARSVM
+from kalelinear.estimator.artl import ARSVM
 
 clf = ARSVM()
 clf.fit(Xs, ys, Xt)
@@ -75,8 +78,9 @@ y_pred = clf.predict(Xt)
 ```
 
 Example 3: Using Side Information Dependence Regularisation Learning Framework
+
 ```
-From kalelinear.estimator import CoIRSVM
+from kalelinear.estimator import CoIRSVM
 
 ns = Xs.shape[0]
 nt = Xt.shape[0]

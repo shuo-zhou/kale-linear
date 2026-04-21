@@ -9,7 +9,7 @@ def download_path():
 
 
 def download_gait_gallery_data(save_path):
-    # Downloading gait gallery data for tests/conftest.py test
+    # Downloading gait gallery data for tests/transformer/test_mpca.py test
     url = "https://github.com/pykale/data/raw/main/videos/gait/gait_gallery_data.mat"
     # Download the file and save it to the specified path
     output_file = Path(save_path).joinpath("gait.mat")
@@ -17,7 +17,7 @@ def download_gait_gallery_data(save_path):
 
 
 def download_mpca_data(save_path):
-    # Downloading MPCA data for tests/embed/test_factorization.py test
+    # Downloading MPCA data for tests/transformer/test_mpca.py test
     url = "https://github.com/pykale/data/raw/main/videos/gait/mpca_baseline.mat"
     # Download the file and save it to the specified path
     output_file = Path(save_path).joinpath("baseline.mat")

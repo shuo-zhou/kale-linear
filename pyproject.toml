@@ -15,7 +15,7 @@ target-version = ["py311"]
 known_first_party = [
     "docs",
     "examples",
-    "kale",
+    "kalelinear",
     "tests",
 ]
 known_third_party = [

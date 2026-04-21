@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from sklearn.exceptions import NotFittedError
 
 from kalelinear.transformer import BDA, JDA, MIDA, TCA
 
@@ -71,7 +72,7 @@ def test_mida_transform_requires_fit(domain_adaptation_data):
     xs, _, _, _, _, _, _, _ = domain_adaptation_data
     transformer = MIDA(n_components=2)
 
-    with pytest.raises(Exception):
+    with pytest.raises(NotFittedError):
         transformer.transform(xs)
 
 

@@ -34,6 +34,24 @@ def test_quadprog_rejects_invalid_solver():
         BaseFramework._quadprog(np.eye(2), np.array([1.0, -1.0]), C=1.0, solver="invalid")
 
 
+def test_semi_binary_dual_support_uses_nonzero_alphas(monkeypatch):
+    alpha = np.array([0.0, 1e-10, 0.25, 0.25 - 1e-7])
+
+    def quadprog_stub(cls, P, y, C, solver):
+        return alpha
+
+    monkeypatch.setattr(BaseFramework, "_quadprog", classmethod(quadprog_stub))
+
+    _, support = BaseFramework._semi_binary_dual(
+        np.eye(4),
+        np.array([1.0, -1.0, 1.0, -1.0]),
+        np.eye(4),
+        C=1.0,
+    )
+
+    assert np.array_equal(support, np.array([2, 3]))
+
+
 def test_base_framework_decision_function_supports_torch_backend():
     torch = pytest.importorskip("torch")
 

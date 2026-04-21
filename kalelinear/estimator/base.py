@@ -71,7 +71,7 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         Q = multi_dot([y_diag, J, x_kernel_matrix, obj_inv, J.T, y_diag]).astype("float32")
         alpha = cls._quadprog(Q, y, C, solver)
         coef_ = multi_dot([obj_inv, J.T, y_diag, alpha])
-        support_ = np.where((alpha > 0) & (alpha < C))
+        support_ = np.flatnonzero(alpha > 1e-8)
         return coef_, support_
 
     @classmethod
