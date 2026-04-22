@@ -379,10 +379,10 @@ class GSDA(BaseEstimator, ClassifierMixin):
         hsic_proba = expit(multi_dot((self.theta_, _simple_hsic)) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 
+        delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt
         if self.regularization is not None:
-            delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt + self.theta_ * self.alpha + self.lambda_ * grad_hsic
-        else:
-            delta_grad = x_tgt.T @ (y_hat - y)
+            delta_grad += self.theta_ * self.alpha
+        delta_grad += self.lambda_ * grad_hsic
 
         hsic_log_loss = -1 * np.log(hsic_proba)
         pred_log_loss = _compute_pred_loss(y, y_hat)
