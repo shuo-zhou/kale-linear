@@ -5,13 +5,15 @@ from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.neighbors import kneighbors_graph
 
+from ._backend import infer_backend, to_backend, to_numpy
 
-def lap_norm(x, n_neighbour=3, metric="cosine", mode="distance", normalise=True):
+
+def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True):
     """[summary]
 
     Parameters
     ----------
-    x : [type]
+    X : [type]
         [description]
     n_neighbour : int, optional
         [description], by default 3
@@ -30,12 +32,14 @@ def lap_norm(x, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
     [type]
         [description]
     """
-    n = x.shape[0]
-    knn_graph = kneighbors_graph(x, n_neighbour, metric=metric, mode=mode).toarray()
+    backend = infer_backend(X)
+    x_np = to_numpy(X)
+    n = x_np.shape[0]
+    knn_graph = kneighbors_graph(x_np, n_neighbour, metric=metric, mode=mode).toarray()
     W = np.zeros((n, n))
     knn_idx = np.logical_or(knn_graph, knn_graph.T)
     if mode == "distance":
-        graph_kernel = pairwise_distances(x, metric=metric)
+        graph_kernel = pairwise_distances(x_np, metric=metric)
         W[knn_idx] = graph_kernel[knn_idx]
     else:
         W[knn_idx] = 1
@@ -46,44 +50,55 @@ def lap_norm(x, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
         lap_mat = np.eye(n) - multi_dot([D_, W, D_])
     else:
         lap_mat = D - W
-    return lap_mat
+    return to_backend(lap_mat, backend, reference=X)
 
 
 def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
+    backend = infer_backend(ys, yt)
+    ys_np = to_numpy(ys) if ys is not None else None
+    yt_np = to_numpy(yt) if yt is not None else None
     n = ns + nt
     e = np.zeros((n, 1))
     e[:ns, 0] = 1.0 / ns
     e[ns:, 0] = -1.0 / nt
     M = np.dot(e, e.T)  # marginal mmd coefficients
 
-    if kind == "joint" and ys is not None:
+    if kind == "joint" and ys_np is not None:
         Mc = 0  # conditional mmd coefficients
-        class_all = np.unique(ys)
-        if yt is not None and class_all.all() != np.unique(yt).all():
-            raise ValueError("Source and target domain should have the same labels")
+        class_all = np.unique(ys_np)
+        if yt_np is not None:
+            target_classes = np.unique(yt_np)
+            if not np.array_equal(class_all, target_classes):
+                raise ValueError("Source and target domain should have the same labels")
 
         for c in class_all:
             es = np.zeros([ns, 1])
-            es[np.where(ys == c)] = 1.0 / (np.where(ys == c)[0].shape[0])
+            es[np.where(ys_np == c)] = 1.0 / (np.where(ys_np == c)[0].shape[0])
             et = np.zeros([nt, 1])
-            if yt is not None:
-                et[np.where(yt == c)[0]] = -1.0 / np.where(yt == c)[0].shape[0]
+            if yt_np is not None:
+                et[np.where(yt_np == c)[0]] = -1.0 / np.where(yt_np == c)[0].shape[0]
             e = np.vstack((es, et))
             e[np.where(np.isinf(e))[0]] = 0
-            Mc = Mc + mu * np.dot(e, e.T)
+            Mc = Mc + np.dot(e, e.T)
         M = (1 - mu) * M + mu * Mc  # joint mmd coefficients
-    return M
+    return to_backend(M, backend, reference=ys if ys is not None else yt)
 
 
-def base_init(x, kernel="linear", **kwargs):
-
-    n = x.shape[0]
+def base_init(X, kernel="linear", **kwargs):
+    backend = infer_backend(X)
+    x_np = to_numpy(X)
+    n = x_np.shape[0]
     # Construct kernel matrix
-    krnl_x = pairwise_kernels(x, metric=kernel, filter_params=True, **kwargs)
-    krnl_x[np.isnan(krnl_x)] = 0
+    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel, filter_params=True, **kwargs)
+    x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
 
-    unit_mat = np.eye(n)
+    unit_matrix = np.eye(n)
     # Construct centering matrix
-    ctr_mat = unit_mat - 1.0 / n * np.ones((n, n))
+    centering_matrix = unit_matrix - 1.0 / n * np.ones((n, n))
 
-    return krnl_x, unit_mat, ctr_mat, n
+    return (
+        to_backend(x_kernel_matrix, backend, reference=X),
+        to_backend(unit_matrix, backend, reference=X),
+        to_backend(centering_matrix, backend, reference=X),
+        n,
+    )

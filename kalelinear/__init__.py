@@ -1,5 +1,5 @@
 """
-pydale.
+kalelinear.
 
 A Transfer Learning Python package
 """

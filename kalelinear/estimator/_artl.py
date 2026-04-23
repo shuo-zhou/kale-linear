@@ -1,11 +1,14 @@
 # =============================================================================
-# Author: Shuo Zhou, szhou20@sheffield.ac.uk, The University of Sheffield
+# Author: Shuo Zhou, shuo.zhou@sheffield.ac.uk, The University of Sheffield
 # =============================================================================
 import numpy as np
 from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils.validation import check_is_fitted
 
-from ..utils import lap_norm, mmd_coef
+from ..utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
+from ..utils.multiclass import score2pred
 from .base import BaseFramework
 
 # =============================================================================
@@ -16,16 +19,16 @@ from .base import BaseFramework
 # =============================================================================
 
 
-def _init_artl(xs, ys, xt=None, yt=None, **kwargs):
+def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
     """[summary]
 
     Parameters
     ----------
-    xs : array-like
+    Xs : array-like
         Source data, shape (ns_samples, n_features)
     ys : array-like
         Source labels, shape (ns_samples,)
-    xt : array-like
+    Xt : array-like
         Target data, shape (nt_samples, n_features), the first ntl
         samples are labelled if yt is not None
     yt : array-like, optional
@@ -33,37 +36,41 @@ def _init_artl(xs, ys, xt=None, yt=None, **kwargs):
 
     Returns
     -------
-    x : array-like
+    X : array-like
         [description]
     y : array-like
 
-    krnl_x : array-like
+    x_kernel_matrix : array-like
 
     M : array-like
 
-    unit_mat : array-like
+    unit_matrix : array-like
 
     """
 
-    if type(xt) == np.ndarray:
-        x = np.concatenate([xs, xt], axis=0)
-        ns = xs.shape[0]
-        nt = xt.shape[0]
+    Xs = to_numpy(Xs)
+    ys = to_numpy(ys)
+    Xt = to_numpy(Xt)
+    yt = to_numpy(yt)
+    if type(Xt) is np.ndarray:
+        X = np.concatenate([Xs, Xt], axis=0)
+        ns = Xs.shape[0]
+        nt = Xt.shape[0]
         M = mmd_coef(ns, nt, ys, yt, kind="joint")
     else:
-        x = xs.copy()
-        M = np.zeros((x.shape[0], x.shape[0]))
+        X = Xs.copy()
+        M = np.zeros((X.shape[0], X.shape[0]))
 
     if yt is not None:
         y = np.concatenate([ys, yt])
     else:
         y = ys.copy()
-    n = x.shape[0]
-    krnl_x = pairwise_kernels(x, **kwargs)
-    krnl_x[np.isnan(krnl_x)] = 0
-    unit_mat = np.eye(n)
+    n = X.shape[0]
+    x_kernel_matrix = pairwise_kernels(X, **kwargs)
+    x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
+    unit_matrix = np.eye(n)
 
-    return x, y, krnl_x, M, unit_mat
+    return X, y, x_kernel_matrix, M, unit_matrix
 
 
 class ARSVM(BaseFramework):
@@ -74,9 +81,9 @@ class ARSVM(BaseFramework):
         lambda_=1.0,
         gamma_=0.0,
         k_neighbour=5,
+        solver="osqp",
         manifold_metric="cosine",
         knn_mode="distance",
-        solver="osqp",
         **kwargs,
     ):
         """Adaptation Regularised Support Vector Machine
@@ -108,7 +115,8 @@ class ARSVM(BaseFramework):
         kwargs :
             kernel param
         """
-        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
+        self.kwargs = kwargs
+        self.kernel = kernel
         self.lambda_ = lambda_
         self.C = C
         self.gamma_ = gamma_
@@ -117,69 +125,123 @@ class ARSVM(BaseFramework):
         # self.alpha = None
         self.knn_mode = knn_mode
         self.manifold_metric = manifold_metric
-        self.support_ = None
+        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
         # self.scaler = StandardScaler()
 
-    def fit(self, xs, ys, xt=None, yt=None):
+    def fit(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        xs : array-like
+        Xs : array-like
             Source data, shape (ns_samples, n_features)
         ys : array-like
             Source labels, shape (ns_samples,)
-        xt : array-like
+        Xt : array-like
             Target data, shape (nt_samples, n_features), the first ntl
             samples are labelled if yt is not None
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        x, y, krnl_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
+        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
+            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        )
 
-        y_transformed = self._lb.fit_transform(y)
+        y_ = self._lb.fit_transform(y)
 
-        Q = unit_mat.copy()
         if self.gamma_ != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, mode=self.knn_mode)
-            Q += multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), krnl_x])
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, mode=self.knn_mode)
+            Q_ = unit_matrix + multi_dot([(self.lambda_ * M + self.gamma_ * lap_mat), x_kernel_matrix])
         else:
-            Q += self.lambda_ * np.dot(M, krnl_x)
+            Q_ = unit_matrix + multi_dot([(self.lambda_ * M), x_kernel_matrix])
 
-        self.coef_, self.support_ = self._solve_semi_dual(krnl_x, y_transformed, Q, self.C, self.solver)
+        self.coef_, self.support_ = self._solve_semi_dual(x_kernel_matrix, y_, Q_, self.C, self.solver)
         # if self._lb.y_type_ == 'binary':
         #     self.support_vectors_ = X[:nl, :][self.support_]
         #     self.n_support_ = self.support_vectors_.shape[0]
         # else:
         #     self.support_vectors_ = []
         #     self.n_support_ = []
-        #     for i in range(y_transformed.shape[1]):
+        #     for i in range(y_.shape[1]):
         #         self.support_vectors_.append(X[:nl, :][self.support_[i]][-1])
         #         self.n_support_.append(self.support_vectors_[-1].shape[0])
 
-        self.x = x
+        self.X = X
+        self.y = y
 
         return self
 
-    def fit_predict(self, xs, ys, xt=None, yt=None):
+    def decision_function(self, X):
+        """Evaluates the decision function for the samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            shape (n_samples, n_features)
+
+        Returns
+        -------
+        array-like
+            decision scores, , shape (n_samples,) for binary classification,
+            (n_samples, n_classes) for multi-class cases
+        """
+        check_is_fitted(self, "X")
+        check_is_fitted(self, "y")
+        # x_fit = self.X
+        backend = infer_backend(X)
+        x_np = to_numpy(X)
+        x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(x_kernel_matrix, self.coef_)
+        return to_backend(scores, backend, reference=X)  # +self.intercept_
+
+    def predict(self, X):
+        """Perform classification on samples in X.
+
+        Parameters
+        ----------
+        X : array-like
+            shape (n_samples, n_features)
+
+        Returns
+        -------
+        array-like
+            predicted labels, , shape (n_samples, )
+        """
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
+        if self._lb.y_type_ == "binary":
+            y_pred_ = np.sign(dec).reshape(-1, 1)
+        else:
+            y_pred_ = score2pred(dec)
+
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
+
+    def fit_predict(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
             classification on samples in Xt.
 
         Parameters
         ----------
-        xs : array-like
+        Xs : array-like
             Source data, shape (ns_samples, n_features)
         ys : array-like
             Source labels, shape (ns_samples,)
-        xt : array-like
+        Xt : array-like
             Target data, shape (nt_samples, n_features), the first ntl
             samples are labelled if yt is not None
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        self.fit(xs, ys, xt, yt)
-
-        return self.predict(self.x)
+        backend = infer_backend(Xs, ys, Xt, yt)
+        self.fit(Xs, ys, Xt, yt)
+        y_pred = self.predict(self.X)
+        return to_backend(to_numpy(y_pred), backend, reference=Xs if backend == "torch" else None)
 
 
 class ARRLS(BaseFramework):
@@ -221,62 +283,116 @@ class ARRLS(BaseFramework):
         kwargs:
             kernel param
         """
-        super().__init__(kernel, k_neighbour, manifold_metric, knn_mode, **kwargs)
+        self.kwargs = kwargs
+        self.kernel = kernel
         self.lambda_ = lambda_
         self.gamma_ = gamma_
         self.sigma_ = sigma_
+        self.k_neighbour = k_neighbour
+        # self.coef_ = None
+        self.knn_mode = knn_mode
+        self.manifold_metric = manifold_metric
+        self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, xs, ys, xt=None, yt=None):
+    def fit(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        xs : array-like
+        Xs : array-like
             Source data, shape (ns_samples, n_features)
         ys : array-like
             Source labels, shape (ns_samples,)
-        xt : array-like
+        Xt : array-like
             Target data, shape (nt_samples, n_features), the first ntl
             samples are labelled if yt is not None
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        x, y, krnl_x, M, unit_mat = _init_artl(xs, ys, xt, yt, metric=self.kernel, filter_params=True, **self.kwargs)
-        n = krnl_x.shape[0]
-        n_labeled = y.shape[0]
+        self.backend_ = infer_backend(Xs, ys, Xt, yt)
+        Xs = to_numpy(Xs)
+        ys = to_numpy(ys)
+        Xt = to_numpy(Xt)
+        yt = to_numpy(yt)
+        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
+            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        )
+        n = x_kernel_matrix.shape[0]
+        nl = y.shape[0]
         J = np.zeros((n, n))
-        J[:n_labeled, :n_labeled] = np.eye(n_labeled)
+        J[:nl, :nl] = np.eye(nl)
 
-        Q = self.sigma_ * unit_mat
         if self.gamma_ != 0:
-            lap_mat = lap_norm(x, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode,)
-            Q += np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), krnl_x)
+            lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
+            Q_ = np.dot((J + self.lambda_ * M + self.gamma_ * lap_mat), x_kernel_matrix) + self.sigma_ * unit_matrix
         else:
-            Q += np.dot((J + self.lambda_ * M), krnl_x)
+            Q_ = np.dot((J + self.lambda_ * M), x_kernel_matrix) + self.sigma_ * unit_matrix
 
-        y_transformed = self._lb.fit_transform(y)
-        self.coef_ = self._solve_semi_ls(Q, y_transformed)
+        y_ = self._lb.fit_transform(y)
+        self.coef_ = self._solve_semi_ls(Q_, y_)
 
-        self.x = x
+        self.X = X
+        self.y = y
 
         return self
 
-    def fit_predict(self, xs, ys, xt=None, yt=None):
+    def predict(self, X):
+        """Perform classification on samples in X.
+
+        Parameters:
+        ----------
+            X : array-like,
+                shape (n_samples, n_features)
+        Returns
+        -------
+        array-like
+            predicted labels, shape (n_samples)
+        """
+        backend = infer_backend(X)
+        dec = to_numpy(self.decision_function(X))
+        if self._lb.y_type_ == "binary":
+            y_pred_ = np.sign(dec).reshape(-1, 1)
+        else:
+            y_pred_ = score2pred(dec)
+
+        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
+        return to_backend(y_pred, backend, reference=X)
+
+    def decision_function(self, X):
+        """Evaluates the decision function for the samples in X.
+
+        Parameters
+        ----------
+            X : array-like,
+                shape (n_samples, n_features)
+        Returns
+        -------
+        array-like
+            prediction scores, shape (n_samples)
+        """
+        backend = infer_backend(X)
+        x_np = to_numpy(X)
+        x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
+        scores = np.dot(x_kernel_matrix, self.coef_)
+        return to_backend(scores, backend, reference=X)
+
+    def fit_predict(self, Xs, ys, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
             classification on samples in Xt.
 
         Parameters
         ----------
-        xs : array-like
+        Xs : array-like
             Source data, shape (ns_samples, n_features)
         ys : array-like
             Source labels, shape (ns_samples,)
-        xt : array-like
+        Xt : array-like
             Target data, shape (nt_samples, n_features), the first ntl
             samples are labelled if yt is not None
         yt : array-like, optional
             Target label, shape (ntl_samples, ), by default None
         """
-        self.fit(xs, ys, xt, yt)
-
-        return self.predict(xt)
+        backend = infer_backend(Xs, ys, Xt, yt)
+        self.fit(Xs, ys, Xt, yt)
+        y_pred = self.predict(Xt)
+        return to_backend(to_numpy(y_pred), backend, reference=Xt if Xt is not None else Xs)

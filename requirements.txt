@@ -2,8 +2,5 @@ cvxopt
 numpy
 osqp
 pandas
-pykale
-pytest
-pytorch
 scikit-learn
 scipy
