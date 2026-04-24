@@ -13,8 +13,8 @@ from sklearn.preprocessing import LabelBinarizer
 from ..utils import infer_backend, to_backend, to_numpy
 
 
-class BaseFramework(BaseEstimator, ClassifierMixin):
-    """Semi-supervised learning framework."""
+class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
+    """Base class for Kale-Linear classifiers."""
 
     def __init__(
         self,
@@ -151,4 +151,8 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         return to_backend(y_pred, backend, reference=X)
 
 
-__all__ = ["BaseFramework"]
+class BaseDomainAdaptationEstimator(BaseKaleEstimator):
+    """Base class for domain adaptation estimators."""
+
+
+__all__ = ["BaseKaleEstimator", "BaseDomainAdaptationEstimator"]

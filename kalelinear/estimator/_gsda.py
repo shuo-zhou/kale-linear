@@ -5,9 +5,10 @@ import numpy as np
 # import torch
 from numpy.linalg import multi_dot
 from scipy.special import expit
-from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
+
+from .base import BaseKaleEstimator
 
 
 def simple_hsic_grad_term(w, X, groups):
@@ -54,7 +55,7 @@ def _compute_pred_loss(y, y_hat):
     return pred_log_loss
 
 
-class GSDA(BaseEstimator, ClassifierMixin):
+class GSDA(BaseKaleEstimator):
     """Group-specific logistic classifier with HSIC regularization.
 
     Parameters

@@ -15,10 +15,10 @@ from sklearn.utils.validation import check_is_fitted
 # from cvxpy.error import SolverError
 from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
 from ..utils.multiclass import score2pred
-from .base import BaseFramework
+from .base import BaseKaleEstimator
 
 
-class LapSVM(BaseFramework):
+class LapSVM(BaseKaleEstimator):
     def __init__(
         self,
         C=1.0,
@@ -175,7 +175,7 @@ class LapSVM(BaseFramework):
         return self.predict(X)
 
 
-class LapRLS(BaseFramework):
+class LapRLS(BaseKaleEstimator):
     def __init__(
         self,
         kernel="linear",

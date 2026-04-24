@@ -18,10 +18,10 @@ from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
 from ..utils.multiclass import score2pred
-from .base import BaseFramework
+from .base import BaseDomainAdaptationEstimator
 
 
-class CoIRSVM(BaseFramework):
+class CoIRSVM(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         C=1.0,
@@ -219,7 +219,7 @@ class CoIRSVM(BaseFramework):
         return self.predict(X)
 
 
-class CoIRLS(BaseFramework):
+class CoIRLS(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         sigma_=1.0,

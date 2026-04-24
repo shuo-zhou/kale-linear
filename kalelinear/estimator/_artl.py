@@ -9,7 +9,7 @@ from sklearn.utils.validation import check_is_fitted
 
 from ..utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
 from ..utils.multiclass import score2pred
-from .base import BaseFramework
+from .base import BaseDomainAdaptationEstimator
 
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
@@ -73,7 +73,7 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
     return X, y, x_kernel_matrix, M, unit_matrix
 
 
-class ARSVM(BaseFramework):
+class ARSVM(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         C=1.0,
@@ -244,7 +244,7 @@ class ARSVM(BaseFramework):
         return to_backend(to_numpy(y_pred), backend, reference=Xs if backend == "torch" else None)
 
 
-class ARRLS(BaseFramework):
+class ARRLS(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         kernel="linear",
