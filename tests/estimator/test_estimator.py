@@ -103,10 +103,12 @@ def test_coir_estimators_predict_labels(estimator_cls, office_test_data):
 
 @pytest.mark.parametrize("estimator_cls", [estimator.ARSVM, estimator.ARRLS])
 def test_artl_estimators_predict_labels(estimator_cls, office_test_data):
-    x, y, tgt_idx, src_idx, _, _, _ = _split_source_target(office_test_data)
+    x, y, z, _ = office_test_data
+    tgt_idx = np.where(z == 0)
+    src_idx = np.where(z != 0)
 
     clf = estimator_cls()
-    clf.fit(x[src_idx], y[src_idx], Xt=x[tgt_idx])
+    clf.fit(x, y[src_idx], covariates=z, target_covariate=0)
 
     decision = clf.decision_function(x[tgt_idx])
     y_pred = clf.predict(x[tgt_idx])
@@ -115,6 +117,37 @@ def test_artl_estimators_predict_labels(estimator_cls, office_test_data):
     assert decision.shape[0] == len(tgt_idx[0])
     assert y_pred.shape == y[tgt_idx].shape
     assert 0 <= acc <= 1
+
+
+@pytest.mark.parametrize("estimator_cls", [estimator.ARSVM, estimator.ARRLS])
+def test_artl_covariate_api_matches_legacy_api(estimator_cls, office_test_data):
+    x, y, z, _ = office_test_data
+    tgt_idx = np.where(z == 0)
+    src_idx = np.where(z != 0)
+
+    legacy = estimator_cls().fit(x[src_idx], y[src_idx], Xt=x[tgt_idx])
+    covariate = estimator_cls().fit(x, y[src_idx], covariates=z, target_covariate=0)
+    full_y = y.copy()
+    full_y[tgt_idx] = -1
+    covariate_full_y = estimator_cls().fit(x, full_y, covariates=z, target_covariate=0, unlabeled_value=-1)
+
+    legacy_decision = legacy.decision_function(x[tgt_idx])
+    assert np.allclose(covariate.decision_function(x[tgt_idx]), legacy_decision)
+    assert np.allclose(covariate_full_y.decision_function(x[tgt_idx]), legacy_decision)
+    assert np.array_equal(covariate.predict(x[tgt_idx]), legacy.predict(x[tgt_idx]))
+    assert np.array_equal(covariate_full_y.predict(x[tgt_idx]), legacy.predict(x[tgt_idx]))
+
+
+@pytest.mark.parametrize("estimator_cls", [estimator.ARSVM, estimator.ARRLS])
+def test_artl_covariate_fit_predict_returns_target_labels(estimator_cls, office_test_data):
+    x, y, z, _ = office_test_data
+    tgt_idx = np.where(z == 0)
+    src_idx = np.where(z != 0)
+
+    y_pred = estimator_cls().fit_predict(x, y[src_idx], covariates=z, target_covariate=0)
+
+    assert y_pred.shape == y[tgt_idx].shape
+    assert set(np.unique(y_pred)).issubset(set(np.unique(y)))
 
 
 @pytest.mark.parametrize("estimator_cls", [estimator.LapSVM, estimator.LapRLS])

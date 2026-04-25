@@ -154,5 +154,73 @@ class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
 class BaseDomainAdaptationEstimator(BaseKaleEstimator):
     """Base class for domain adaptation estimators."""
 
+    def _split_source_target_by_covariate(
+        self,
+        X,
+        y,
+        covariates,
+        target_covariate=None,
+        unlabeled_value=None,
+    ):
+        """Split combined domain data into source and target blocks."""
+        if covariates is None:
+            raise ValueError("`covariates` must be provided to identify source and target domains.")
+
+        X = to_numpy(X)
+        y = to_numpy(y)
+        covariates = np.asarray(to_numpy(covariates))
+
+        if y is None:
+            raise ValueError("`y` must contain source labels.")
+        if covariates.ndim == 2 and covariates.shape[1] == 1:
+            covariates = covariates.reshape(-1)
+        if covariates.ndim != 1:
+            raise ValueError("`covariates` must be a 1D array of binary source/target domain labels.")
+        if covariates.shape[0] != X.shape[0]:
+            raise ValueError("`covariates` and `X` must have the same number of samples.")
+
+        unique_covariates = np.unique(covariates)
+        if unique_covariates.size != 2:
+            raise ValueError("`covariates` must contain exactly two domain values.")
+        if target_covariate is None:
+            target_covariate = unique_covariates[0]
+        elif target_covariate not in unique_covariates:
+            raise ValueError("`target_covariate` must match one of the observed covariate values.")
+
+        target_idx = np.flatnonzero(covariates == target_covariate)
+        source_idx = np.flatnonzero(covariates != target_covariate)
+        ns = source_idx.shape[0]
+        n_samples = X.shape[0]
+
+        y = np.asarray(y)
+        if y.shape[0] == ns:
+            ys = y
+            target_labeled_idx = np.array([], dtype=int)
+        elif y.shape[0] == n_samples:
+            ys = y[source_idx]
+            target_labels = y[target_idx]
+            if unlabeled_value is None:
+                target_labeled_mask = np.ones(target_idx.shape[0], dtype=bool)
+            else:
+                target_labeled_mask = target_labels != unlabeled_value
+            target_labeled_idx = target_idx[target_labeled_mask]
+        else:
+            raise ValueError("`y` must contain either source labels only or one label per sample in `X`.")
+
+        target_unlabeled_idx = np.setdiff1d(target_idx, target_labeled_idx, assume_unique=True)
+        target_fit_idx = np.concatenate([target_labeled_idx, target_unlabeled_idx])
+        yt = y[target_labeled_idx] if target_labeled_idx.size > 0 else None
+
+        return {
+            "Xs": X[source_idx],
+            "ys": ys,
+            "Xt": X[target_fit_idx],
+            "yt": yt,
+            "source_idx": source_idx,
+            "target_idx": target_idx,
+            "target_fit_idx": target_fit_idx,
+            "target_covariate": target_covariate,
+        }
+
 
 __all__ = ["BaseKaleEstimator", "BaseDomainAdaptationEstimator"]

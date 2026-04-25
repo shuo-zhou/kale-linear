@@ -73,6 +73,49 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
     return X, y, x_kernel_matrix, M, unit_matrix
 
 
+def _uses_legacy_artl_inputs(X, covariates=None, Xt=None):
+    if Xt is not None or covariates is None:
+        return True
+
+    x = to_numpy(X)
+    covariates = np.asarray(to_numpy(covariates))
+    return covariates.ndim == 0 or covariates.shape[0] != x.shape[0]
+
+
+def _prepare_artl_fit_data(
+    estimator,
+    X,
+    y,
+    covariates=None,
+    target_covariate=None,
+    unlabeled_value=None,
+    Xt=None,
+    yt=None,
+    **kwargs,
+):
+    if _uses_legacy_artl_inputs(X, covariates=covariates, Xt=Xt):
+        if Xt is None and covariates is not None:
+            Xt = covariates
+        estimator.source_idx_ = None
+        estimator.target_idx_ = None
+        estimator.target_fit_idx_ = None
+        estimator.target_covariate_ = target_covariate
+        return _init_artl(X, y, Xt, yt, **kwargs)
+
+    split = estimator._split_source_target_by_covariate(
+        X,
+        y,
+        covariates,
+        target_covariate=target_covariate,
+        unlabeled_value=unlabeled_value,
+    )
+    estimator.source_idx_ = split["source_idx"]
+    estimator.target_idx_ = split["target_idx"]
+    estimator.target_fit_idx_ = split["target_fit_idx"]
+    estimator.target_covariate_ = split["target_covariate"]
+    return _init_artl(split["Xs"], split["ys"], split["Xt"], split["yt"], **kwargs)
+
+
 class ARSVM(BaseDomainAdaptationEstimator):
     def __init__(
         self,
@@ -128,28 +171,46 @@ class ARSVM(BaseDomainAdaptationEstimator):
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
         # self.scaler = StandardScaler()
 
-    def fit(self, Xs, ys, Xt=None, yt=None):
+    def fit(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        Xs : array-like
-            Source data, shape (ns_samples, n_features)
-        ys : array-like
-            Source labels, shape (ns_samples,)
-        Xt : array-like
-            Target data, shape (nt_samples, n_features), the first ntl
-            samples are labelled if yt is not None
+        X : array-like
+            Source and target data, shape (n_samples, n_features). For
+            backwards compatibility, this may also be source data when ``Xt``
+            is provided.
+        y : array-like
+            Source labels only, or one label per row in ``X``. If full-length
+            labels include unlabeled target rows, mark them with
+            ``unlabeled_value``.
+        covariates : array-like, optional
+            Binary domain labels aligned with ``X``. The value specified by
+            ``target_covariate`` identifies target rows; all other rows are
+            treated as source rows.
+        target_covariate : scalar, optional
+            Domain value identifying target samples. Defaults to the first
+            sorted covariate value.
+        unlabeled_value : scalar, optional
+            Sentinel used for unlabeled target rows when ``y`` is full length.
+        Xt : array-like, optional
+            Legacy target data.
         yt : array-like, optional
-            Target label, shape (ntl_samples, ), by default None
+            Legacy target labels.
         """
-        self.backend_ = infer_backend(Xs, ys, Xt, yt)
-        Xs = to_numpy(Xs)
-        ys = to_numpy(ys)
-        Xt = to_numpy(Xt)
-        yt = to_numpy(yt)
-        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
-            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        self.backend_ = infer_backend(X, y, covariates, Xt, yt)
+        X, y, x_kernel_matrix, M, unit_matrix = _prepare_artl_fit_data(
+            self,
+            X,
+            y,
+            covariates=covariates,
+            target_covariate=target_covariate,
+            unlabeled_value=unlabeled_value,
+            Xt=Xt,
+            yt=yt,
+            metric=self.kernel,
+            filter_params=True,
+            **self.kwargs,
         )
 
         y_ = self._lb.fit_transform(y)
@@ -222,26 +283,41 @@ class ARSVM(BaseDomainAdaptationEstimator):
         y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
         return to_backend(y_pred, backend, reference=X)
 
-    def fit_predict(self, Xs, ys, Xt=None, yt=None):
+    def fit_predict(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
-            classification on samples in Xt.
+            classification on target samples.
 
         Parameters
         ----------
-        Xs : array-like
-            Source data, shape (ns_samples, n_features)
-        ys : array-like
-            Source labels, shape (ns_samples,)
-        Xt : array-like
-            Target data, shape (nt_samples, n_features), the first ntl
-            samples are labelled if yt is not None
-        yt : array-like, optional
-            Target label, shape (ntl_samples, ), by default None
+        X : array-like
+            Combined source and target data, or legacy source data when
+            ``Xt`` is provided.
+        y : array-like
+            Source labels or full-length labels.
+        covariates : array-like, optional
+            Binary domain labels aligned with ``X``.
         """
-        backend = infer_backend(Xs, ys, Xt, yt)
-        self.fit(Xs, ys, Xt, yt)
-        y_pred = self.predict(self.X)
-        return to_backend(to_numpy(y_pred), backend, reference=Xs if backend == "torch" else None)
+        backend = infer_backend(X, y, covariates, Xt, yt)
+        legacy_inputs = _uses_legacy_artl_inputs(X, covariates=covariates, Xt=Xt)
+        legacy_target = Xt if Xt is not None else covariates
+
+        self.fit(
+            X,
+            y,
+            covariates=covariates,
+            target_covariate=target_covariate,
+            unlabeled_value=unlabeled_value,
+            Xt=Xt,
+            yt=yt,
+        )
+
+        if legacy_inputs:
+            predict_X = legacy_target if legacy_target is not None else self.X
+        else:
+            predict_X = to_numpy(X)[self.target_idx_]
+
+        y_pred = self.predict(predict_X)
+        return to_backend(to_numpy(y_pred), backend, reference=predict_X if backend == "torch" else None)
 
 
 class ARRLS(BaseDomainAdaptationEstimator):
@@ -294,28 +370,44 @@ class ARRLS(BaseDomainAdaptationEstimator):
         self.manifold_metric = manifold_metric
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
-    def fit(self, Xs, ys, Xt=None, yt=None):
+    def fit(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data.
 
         Parameters
         ----------
-        Xs : array-like
-            Source data, shape (ns_samples, n_features)
-        ys : array-like
-            Source labels, shape (ns_samples,)
-        Xt : array-like
-            Target data, shape (nt_samples, n_features), the first ntl
-            samples are labelled if yt is not None
+        X : array-like
+            Source and target data, shape (n_samples, n_features). For
+            backwards compatibility, this may also be source data when ``Xt``
+            is provided.
+        y : array-like
+            Source labels only, or one label per row in ``X``. If full-length
+            labels include unlabeled target rows, mark them with
+            ``unlabeled_value``.
+        covariates : array-like, optional
+            Binary domain labels aligned with ``X``.
+        target_covariate : scalar, optional
+            Domain value identifying target samples. Defaults to the first
+            sorted covariate value.
+        unlabeled_value : scalar, optional
+            Sentinel used for unlabeled target rows when ``y`` is full length.
+        Xt : array-like, optional
+            Legacy target data.
         yt : array-like, optional
-            Target label, shape (ntl_samples, ), by default None
+            Legacy target labels.
         """
-        self.backend_ = infer_backend(Xs, ys, Xt, yt)
-        Xs = to_numpy(Xs)
-        ys = to_numpy(ys)
-        Xt = to_numpy(Xt)
-        yt = to_numpy(yt)
-        X, y, x_kernel_matrix, M, unit_matrix = _init_artl(
-            Xs, ys, Xt, yt, metric=self.kernel, filter_params=True, **self.kwargs
+        self.backend_ = infer_backend(X, y, covariates, Xt, yt)
+        X, y, x_kernel_matrix, M, unit_matrix = _prepare_artl_fit_data(
+            self,
+            X,
+            y,
+            covariates=covariates,
+            target_covariate=target_covariate,
+            unlabeled_value=unlabeled_value,
+            Xt=Xt,
+            yt=yt,
+            metric=self.kernel,
+            filter_params=True,
+            **self.kwargs,
         )
         n = x_kernel_matrix.shape[0]
         nl = y.shape[0]
@@ -376,23 +468,38 @@ class ARRLS(BaseDomainAdaptationEstimator):
         scores = np.dot(x_kernel_matrix, self.coef_)
         return to_backend(scores, backend, reference=X)
 
-    def fit_predict(self, Xs, ys, Xt=None, yt=None):
+    def fit_predict(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
-            classification on samples in Xt.
+            classification on target samples.
 
         Parameters
         ----------
-        Xs : array-like
-            Source data, shape (ns_samples, n_features)
-        ys : array-like
-            Source labels, shape (ns_samples,)
-        Xt : array-like
-            Target data, shape (nt_samples, n_features), the first ntl
-            samples are labelled if yt is not None
-        yt : array-like, optional
-            Target label, shape (ntl_samples, ), by default None
+        X : array-like
+            Combined source and target data, or legacy source data when
+            ``Xt`` is provided.
+        y : array-like
+            Source labels or full-length labels.
+        covariates : array-like, optional
+            Binary domain labels aligned with ``X``.
         """
-        backend = infer_backend(Xs, ys, Xt, yt)
-        self.fit(Xs, ys, Xt, yt)
-        y_pred = self.predict(Xt)
-        return to_backend(to_numpy(y_pred), backend, reference=Xt if Xt is not None else Xs)
+        backend = infer_backend(X, y, covariates, Xt, yt)
+        legacy_inputs = _uses_legacy_artl_inputs(X, covariates=covariates, Xt=Xt)
+        legacy_target = Xt if Xt is not None else covariates
+
+        self.fit(
+            X,
+            y,
+            covariates=covariates,
+            target_covariate=target_covariate,
+            unlabeled_value=unlabeled_value,
+            Xt=Xt,
+            yt=yt,
+        )
+
+        if legacy_inputs:
+            predict_X = legacy_target if legacy_target is not None else self.X
+        else:
+            predict_X = to_numpy(X)[self.target_idx_]
+
+        y_pred = self.predict(predict_X)
+        return to_backend(to_numpy(y_pred), backend, reference=predict_X if backend == "torch" else None)
