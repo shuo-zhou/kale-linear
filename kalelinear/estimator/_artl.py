@@ -19,7 +19,7 @@ from .base import BaseDomainAdaptationEstimator
 # =============================================================================
 
 
-def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
+def _init_artl(estimator, Xs, ys, Xt=None, yt=None, **kwargs):
     """[summary]
 
     Parameters
@@ -65,10 +65,7 @@ def _init_artl(Xs, ys, Xt=None, yt=None, **kwargs):
         y = np.concatenate([ys, yt])
     else:
         y = ys.copy()
-    n = X.shape[0]
-    x_kernel_matrix = pairwise_kernels(X, **kwargs)
-    x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
-    unit_matrix = np.eye(n)
+    X, y, _, x_kernel_matrix, unit_matrix, _, _ = estimator._prepare_kernel_fit_data(X, y, **kwargs)
 
     return X, y, x_kernel_matrix, M, unit_matrix
 
@@ -100,7 +97,7 @@ def _prepare_artl_fit_data(
         estimator.target_idx_ = None
         estimator.target_fit_idx_ = None
         estimator.target_covariate_ = target_covariate
-        return _init_artl(X, y, Xt, yt, **kwargs)
+        return _init_artl(estimator, X, y, Xt, yt, **kwargs)
 
     split = estimator._split_source_target_by_covariate(
         X,
@@ -113,7 +110,7 @@ def _prepare_artl_fit_data(
     estimator.target_idx_ = split["target_idx"]
     estimator.target_fit_idx_ = split["target_fit_idx"]
     estimator.target_covariate_ = split["target_covariate"]
-    return _init_artl(split["Xs"], split["ys"], split["Xt"], split["yt"], **kwargs)
+    return _init_artl(estimator, split["Xs"], split["ys"], split["Xt"], split["yt"], **kwargs)
 
 
 class ARSVM(BaseDomainAdaptationEstimator):
@@ -189,7 +186,7 @@ class ARSVM(BaseDomainAdaptationEstimator):
             ``target_covariate`` identifies target rows; all other rows are
             treated as source rows.
         target_covariate : scalar, optional
-            Domain value identifying target samples. Defaults to the first
+            Domain value identifying target samples. Defaults to the last
             sorted covariate value.
         unlabeled_value : scalar, optional
             Sentinel used for unlabeled target rows when ``y`` is full length.

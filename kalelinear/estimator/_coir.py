@@ -13,7 +13,7 @@ from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
-from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
+from ..utils import infer_backend, lap_norm, to_backend, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
@@ -99,10 +99,9 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
             [description]
         """
         self.backend_ = infer_backend(X, y, covariates)
-        X = to_numpy(X)
-        y = to_numpy(y)
-        covariates = to_numpy(covariates)
-        x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
+            X, y, covariates, kernel=self.kernel, **self.kwargs
+        )
         if isinstance(covariates, np.ndarray):
             c_kernel_matrix = np.dot(covariates, covariates.T)
         else:
@@ -294,12 +293,11 @@ class CoIRLS(BaseDomainAdaptationEstimator):
             [description]
         """
         self.backend_ = infer_backend(X, y, covariates)
-        X = to_numpy(X)
-        y = to_numpy(y)
-        covariates = to_numpy(covariates)
+        X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
+            X, y, covariates, kernel=self.kernel, **self.kwargs
+        )
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
-        x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if isinstance(covariates, np.ndarray):
             c_kernel_matrix = np.dot(covariates, covariates.T)
         else:

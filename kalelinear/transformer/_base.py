@@ -26,6 +26,7 @@ from sklearn.utils.validation import (
     validate_data,
 )
 
+from kalelinear.utils import centering_matrix as _centering_matrix
 from kalelinear.utils import mmd_coef
 
 
@@ -52,9 +53,7 @@ class KernelFitContext:
 
 def _centering_kernel(size, dtype=np.float64):
     """Generate a centering matrix."""
-    identity = np.eye(size, dtype=dtype)
-    ones_matrix = np.ones((size, size), dtype)
-    return identity - ones_matrix / size
+    return _centering_matrix(size, dtype=dtype)
 
 
 def _get_eigenproblem_matrices(eigenproblem):
@@ -796,7 +795,8 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
                 raise ValueError("Number of labeled samples does not meet the required conditions.")
 
             unlabeled_value = self._get_unlabeled_value(y)
-            y_fit = np.full(ns + nt, unlabeled_value, dtype=object)
+            y_fit_dtype = y.dtype if np.issubdtype(y.dtype, np.number) else object
+            y_fit = np.full(ns + nt, unlabeled_value, dtype=y_fit_dtype)
             y_fit[:ns] = ys
             if yt is not None:
                 y_fit[ns + target_labeled_pos] = yt

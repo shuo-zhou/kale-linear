@@ -10,7 +10,7 @@ from sklearn.exceptions import NotFittedError
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
-from ..utils import infer_backend, to_backend, to_numpy
+from ..utils import infer_backend, kernel_fit_matrices, to_backend, to_numpy
 
 
 class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
@@ -153,6 +153,23 @@ class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
 
 class BaseDomainAdaptationEstimator(BaseKaleEstimator):
     """Base class for domain adaptation estimators."""
+
+    @staticmethod
+    def _prepare_kernel_fit_data(X, y=None, covariates=None, kernel="linear", **kwargs):
+        """Prepare numpy fit arrays and common kernel matrices."""
+        metric = kwargs.pop("metric", kernel)
+        filter_params = kwargs.pop("filter_params", True)
+        X = to_numpy(X)
+        y = to_numpy(y)
+        covariates = to_numpy(covariates)
+        x_kernel_matrix, unit_matrix, centering_matrix, n = kernel_fit_matrices(
+            X,
+            metric=metric,
+            filter_params=filter_params,
+            **kwargs,
+        )
+
+        return X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n
 
     def _split_source_target_by_covariate(
         self,

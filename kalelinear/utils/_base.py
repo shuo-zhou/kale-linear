@@ -84,21 +84,35 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
     return to_backend(M, backend, reference=ys if ys is not None else yt)
 
 
-def base_init(X, kernel="linear", **kwargs):
+def centering_matrix(size, dtype=np.float64):
+    """Generate a centering matrix."""
+    unit_matrix = np.eye(size, dtype=dtype)
+    return unit_matrix - 1.0 / size * np.ones((size, size), dtype=dtype)
+
+
+def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, return_backend=False, **kwargs):
+    """Prepare common fit-time kernel, identity, and centering matrices."""
     backend = infer_backend(X)
     x_np = to_numpy(X)
     n = x_np.shape[0]
-    # Construct kernel matrix
-    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel, filter_params=True, **kwargs)
+    kernel_metric = kernel if metric is None else metric
+
+    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel_metric, filter_params=filter_params, **kwargs)
     x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
 
     unit_matrix = np.eye(n)
-    # Construct centering matrix
-    centering_matrix = unit_matrix - 1.0 / n * np.ones((n, n))
+    h_matrix = centering_matrix(n)
+
+    if not return_backend:
+        return x_kernel_matrix, unit_matrix, h_matrix, n
 
     return (
         to_backend(x_kernel_matrix, backend, reference=X),
         to_backend(unit_matrix, backend, reference=X),
-        to_backend(centering_matrix, backend, reference=X),
+        to_backend(h_matrix, backend, reference=X),
         n,
     )
+
+
+def base_init(X, kernel="linear", **kwargs):
+    return kernel_fit_matrices(X, kernel=kernel, return_backend=True, **kwargs)
