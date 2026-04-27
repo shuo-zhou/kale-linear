@@ -10,6 +10,8 @@ from sklearn.exceptions import NotFittedError
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
+from kalelinear._domain import split_source_target
+
 from ..utils import infer_backend, kernel_fit_matrices, to_backend, to_numpy
 
 
@@ -185,27 +187,13 @@ class BaseDomainAdaptationEstimator(BaseKaleEstimator):
 
         X = to_numpy(X)
         y = to_numpy(y)
-        covariates = np.asarray(to_numpy(covariates))
+        covariates = to_numpy(covariates)
 
         if y is None:
             raise ValueError("`y` must contain source labels.")
-        if covariates.ndim == 2 and covariates.shape[1] == 1:
-            covariates = covariates.reshape(-1)
-        if covariates.ndim != 1:
-            raise ValueError("`covariates` must be a 1D array of binary source/target domain labels.")
-        if covariates.shape[0] != X.shape[0]:
-            raise ValueError("`covariates` and `X` must have the same number of samples.")
-
-        unique_covariates = np.unique(covariates)
-        if unique_covariates.size != 2:
-            raise ValueError("`covariates` must contain exactly two domain values.")
-        if target_covariate is None:
-            target_covariate = unique_covariates[0]
-        elif target_covariate not in unique_covariates:
-            raise ValueError("`target_covariate` must match one of the observed covariate values.")
-
-        target_idx = np.flatnonzero(covariates == target_covariate)
-        source_idx = np.flatnonzero(covariates != target_covariate)
+        split = split_source_target(X, covariates, target_covariate=target_covariate)
+        source_idx = split.source_idx
+        target_idx = split.target_idx
         ns = source_idx.shape[0]
         n_samples = X.shape[0]
 
@@ -236,7 +224,7 @@ class BaseDomainAdaptationEstimator(BaseKaleEstimator):
             "source_idx": source_idx,
             "target_idx": target_idx,
             "target_fit_idx": target_fit_idx,
-            "target_covariate": target_covariate,
+            "target_covariate": split.target_covariate,
         }
 
 

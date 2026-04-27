@@ -8,6 +8,8 @@ from scipy.special import expit
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
 
+from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
+
 from .base import BaseKaleEstimator
 
 
@@ -101,6 +103,7 @@ class GSDA(BaseKaleEstimator):
         optimizer="gd",
         memory_size=10,
         random_state=None,
+        covariate_encoder=None,
     ):
         self.lr = lr
         self.max_iter = max_iter
@@ -114,6 +117,7 @@ class GSDA(BaseKaleEstimator):
         self.optimizer = optimizer
         self.memory_size = memory_size
         self.random_state = random_state
+        self.covariate_encoder = covariate_encoder
 
     def fit(self, X, y, groups, target_idx=None):
         """Fit the GSDA classifier.
@@ -137,14 +141,28 @@ class GSDA(BaseKaleEstimator):
         X = np.asarray(X)
         n_samples = X.shape[0]
         y = np.asarray(y)
-        groups = np.asarray(groups)
+        groups, encoder = fit_covariate_encoder(
+            groups,
+            self.covariate_encoder,
+            n_samples,
+            error_prefix="Groups",
+        )
+        self.covariate_encoder_ = encoder
+        groups = check_numeric_covariates(
+            groups,
+            n_samples,
+            allow_none=False,
+            error_prefix="Groups",
+            numeric_error_message=(
+                "Groups must be numeric when `covariate_encoder` is None. "
+                "Provide numeric groups or set `covariate_encoder`."
+            ),
+        )
         # ensure X, y, and groups have compatible shapes
-        if n_samples < y.shape[0] or n_samples != groups.shape[0]:
+        if n_samples < y.shape[0]:
             raise ValueError("Mismatched number of samples between X, y, and groups.")
         if isinstance(target_idx, (list, np.ndarray)) and len(target_idx) > y.shape[0]:
             raise ValueError("Length of target_idx cannot exceed number of target samples.")
-        if groups.ndim == 1:
-            groups = groups.reshape((-1, 1))
         existing_losses = getattr(self, "losses", None)
         if isinstance(existing_losses, dict):
             self.losses = {key: [] for key in existing_losses}

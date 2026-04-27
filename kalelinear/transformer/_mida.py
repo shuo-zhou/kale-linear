@@ -10,10 +10,11 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import KernelCenterer
 from sklearn.utils._param_validation import Interval
 
-from kalelinear.transformer._base import _centering_kernel, _num_features, BaseKernelDomainAdapter
+from kalelinear.transformer._base import _num_features, BaseKernelDomainTransformer
+from kalelinear.utils import centering_matrix
 
 
-class MIDA(BaseKernelDomainAdapter):
+class MIDA(BaseKernelDomainTransformer):
     """Maximum Independence Domain Adaptation (MIDA).
 
     MIDA learns a covariate-invariant feature space by maximizing the
@@ -29,7 +30,7 @@ class MIDA(BaseKernelDomainAdapter):
     """
 
     _parameter_constraints: dict = {
-        **BaseKernelDomainAdapter._parameter_constraints,
+        **BaseKernelDomainTransformer._parameter_constraints,
         "mu": [Interval(Real, 0, None, closed="neither")],
         "eta": [Interval(Real, 0, None, closed="neither")],
     }
@@ -89,7 +90,7 @@ class MIDA(BaseKernelDomainAdapter):
         return True
 
     def _make_eigenproblem(self, x_kernel_matrix, context):
-        h = _centering_kernel(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
+        h = centering_matrix(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
         y_kernel_matrix = pairwise_kernels(context.y_encoded, n_jobs=self.n_jobs)
         covariate_kernel = pairwise_kernels(context.covariates_fit, n_jobs=self.n_jobs)
 

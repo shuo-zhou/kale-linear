@@ -13,12 +13,33 @@ from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
+from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
+
 from ..utils import infer_backend, lap_norm, to_backend, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
 from ..utils.multiclass import score2pred
 from .base import BaseDomainAdaptationEstimator
+
+
+def _fit_model_covariates(estimator, covariates, n_samples):
+    covariates, encoder = fit_covariate_encoder(
+        covariates,
+        estimator.covariate_encoder,
+        n_samples,
+        error_prefix="Covariates",
+    )
+    estimator.covariate_encoder_ = encoder
+    return check_numeric_covariates(
+        covariates,
+        n_samples,
+        error_prefix="Covariates",
+        numeric_error_message=(
+            "Covariates must be numeric when `covariate_encoder` is None. "
+            "Provide numeric covariates or set `covariate_encoder`."
+        ),
+    )
 
 
 class CoIRSVM(BaseDomainAdaptationEstimator):
@@ -32,6 +53,7 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
         manifold_metric="cosine",
         knn_mode="distance",
         solver="osqp",
+        covariate_encoder=None,
         **kwargs,
     ):
         """Covariate Independence Regularised Support Vector Machine
@@ -77,6 +99,7 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
         self.manifold_metric = manifold_metric
         self.k_neighbour = k_neighbour
         self.knn_mode = knn_mode
+        self.covariate_encoder = covariate_encoder
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
     def fit(self, X, y, covariates=None):
@@ -102,6 +125,7 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
         X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
+        covariates = _fit_model_covariates(self, covariates, n)
         if isinstance(covariates, np.ndarray):
             c_kernel_matrix = np.dot(covariates, covariates.T)
         else:
@@ -229,6 +253,7 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         knn_mode="distance",
         manifold_metric="cosine",
         class_weight=None,
+        covariate_encoder=None,
         **kwargs,
     ):
         """Covariate Independence Regularised Least Square
@@ -272,6 +297,7 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         self.k = k
         self.knn_mode = knn_mode
         self.class_weight = class_weight
+        self.covariate_encoder = covariate_encoder
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
         self.kwargs = kwargs
 
@@ -296,6 +322,7 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
+        covariates = _fit_model_covariates(self, covariates, n)
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
         if isinstance(covariates, np.ndarray):

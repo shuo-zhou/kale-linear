@@ -145,6 +145,17 @@ def test_mida_covariate_encoder_onehot(sample_data):
     testing.assert_equal(mida.covariates_fit_.shape[0], len(x))
 
 
+def test_mida_covariate_encoder_onehot_accepts_strings(sample_data):
+    x, y, domains, _ = sample_data
+    string_domains = np.asarray([f"domain-{domain}" for domain in domains])
+
+    mida = MIDA(n_components=2, covariate_encoder="onehot")
+    z = mida.fit_transform(x, y=y, covariates=string_domains)
+
+    assert z.shape == (len(x), 2)
+    assert np.issubdtype(mida.covariates_fit_.dtype, np.number)
+
+
 def test_mida_requires_numeric_covariates_without_encoder(sample_data):
     x, y, domains, _ = sample_data
 

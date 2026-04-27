@@ -101,6 +101,24 @@ def test_coir_estimators_predict_labels(estimator_cls, office_test_data):
     assert 0 <= acc <= 1
 
 
+@pytest.mark.parametrize("estimator_cls", [estimator.CoIRSVM, estimator.CoIRLS])
+def test_coir_covariate_encoder_accepts_string_covariates(estimator_cls, office_test_data):
+    x, y, z, _ = office_test_data
+    tgt_idx = np.where(z == 0)
+    src_idx = np.where(z != 0)
+    x_train = np.concatenate((x[src_idx], x[tgt_idx]))
+    z_train = np.concatenate((z[src_idx], z[tgt_idx]))
+    y_train = y[src_idx]
+    string_covariates = np.where(z_train == 0, "target", "source")
+    numeric_covariates = np.eye(2)[z_train]
+
+    string_clf = estimator_cls(covariate_encoder="onehot").fit(x_train, y_train, string_covariates)
+    numeric_clf = estimator_cls().fit(x_train, y_train, numeric_covariates)
+
+    assert string_clf.covariate_encoder_ is not None
+    assert np.allclose(string_clf.decision_function(x[tgt_idx]), numeric_clf.decision_function(x[tgt_idx]))
+
+
 @pytest.mark.parametrize("estimator_cls", [estimator.ARSVM, estimator.ARRLS])
 def test_artl_estimators_predict_labels(estimator_cls, office_test_data):
     x, y, z, _ = office_test_data
@@ -187,6 +205,20 @@ def test_gsda_fit_predicts_target_labels(office_test_data):
     assert set(np.unique(y_pred)).issubset({0.0, 1.0})
     assert len(clf.losses["time"]) == 1
     assert len(clf.losses["ovr"]) > 0
+
+
+def test_gsda_covariate_encoder_accepts_string_groups(office_test_data):
+    x, y, z, _ = office_test_data
+    target_idx = np.where(z == 0)[0]
+    string_groups = np.where(z == 0, "target", "source")
+
+    clf = estimator.GSDA(max_iter=25, random_state=0, covariate_encoder="onehot")
+    clf.fit(x, y[target_idx], string_groups, target_idx=target_idx)
+
+    y_pred = clf.predict(x[target_idx])
+
+    assert clf.covariate_encoder_ is not None
+    assert y_pred.shape == y[target_idx].shape
 
 
 def test_laprls_supports_torch_backend(office_test_data):
