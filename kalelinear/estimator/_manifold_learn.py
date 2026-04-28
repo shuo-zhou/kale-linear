@@ -13,9 +13,9 @@ from sklearn.utils.validation import check_is_fitted
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
-from ..utils.multiclass import score2pred
-from .base import BaseKaleEstimator
+from kalelinear.estimator.base import BaseKaleEstimator
+from kalelinear.utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
+from kalelinear.utils.multiclass import score2pred
 
 
 class LapSVM(BaseKaleEstimator):

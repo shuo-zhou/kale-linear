@@ -3,14 +3,13 @@ from time import time
 import numpy as np
 
 # import torch
-from numpy.linalg import multi_dot
 from scipy.special import expit
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
 
 from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
-
-from .base import BaseKaleEstimator
+from kalelinear.estimator.base import BaseKaleEstimator
+from kalelinear.utils import hsic_grad_term
 
 
 def simple_hsic_grad_term(w, X, groups):
@@ -32,10 +31,7 @@ def simple_hsic_grad_term(w, X, groups):
     array-like, shape (n_features,)
         Simplified HSIC gradient term.
     """
-    n = X.shape[0]
-    centering_matrix = np.eye(n) - np.ones((n, n)) / n
-
-    return multi_dot((X.T, centering_matrix, groups, groups.T, centering_matrix, X, w))
+    return hsic_grad_term(w, X, groups)
 
 
 def _compute_pred_loss(y, y_hat):
@@ -395,7 +391,7 @@ class GSDA(BaseKaleEstimator):
         y_hat = expit(x_tgt @ self.theta_)
         # n_feature = X.shape[1]
         _simple_hsic = simple_hsic_grad_term(self.theta_, X, groups)
-        hsic_proba = expit(multi_dot((self.theta_, _simple_hsic)) / np.square(n_sample - 1))
+        hsic_proba = expit(np.dot(self.theta_, _simple_hsic) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 
         delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt

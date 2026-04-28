@@ -9,18 +9,16 @@ In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020
 """
 
 import numpy as np
-from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
 from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
-
-from ..utils import infer_backend, lap_norm, to_backend, to_numpy
+from kalelinear.estimator.base import BaseDomainAdaptationEstimator
+from kalelinear.utils import centered_kernel_matrix, infer_backend, lap_norm, to_backend, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils.multiclass import score2pred
-from .base import BaseDomainAdaptationEstimator
+from kalelinear.utils.multiclass import score2pred
 
 
 def _fit_model_covariates(estimator, covariates, n_samples):
@@ -122,30 +120,25 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
             [description]
         """
         self.backend_ = infer_backend(X, y, covariates)
-        X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
+        X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
         covariates = _fit_model_covariates(self, covariates, n)
         if isinstance(covariates, np.ndarray):
-            c_kernel_matrix = np.dot(covariates, covariates.T)
+            covariate_hsic_matrix = centered_kernel_matrix(covariates)
         else:
-            c_kernel_matrix = np.zeros((n, n))
+            covariate_hsic_matrix = np.zeros((n, n))
         y_ = self._lb.fit_transform(y)
 
         Q_ = unit_matrix.copy()
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
             Q_ += np.dot(
-                self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix])
-                + self.mu / np.square(n) * lap_mat,
+                self.lambda_ / np.square(n - 1) * covariate_hsic_matrix + self.mu / np.square(n) * lap_mat,
                 x_kernel_matrix,
             )
         else:
-            Q_ += (
-                self.lambda_
-                * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix, x_kernel_matrix])
-                / np.square(n - 1)
-            )
+            Q_ += self.lambda_ * np.dot(covariate_hsic_matrix, x_kernel_matrix) / np.square(n - 1)
 
         self.coef_, self.support_ = self._solve_semi_dual(x_kernel_matrix, y_, Q_, self.C, self.solver)
 
@@ -319,16 +312,16 @@ class CoIRLS(BaseDomainAdaptationEstimator):
             [description]
         """
         self.backend_ = infer_backend(X, y, covariates)
-        X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n = self._prepare_kernel_fit_data(
+        X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
         covariates = _fit_model_covariates(self, covariates, n)
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
         if isinstance(covariates, np.ndarray):
-            c_kernel_matrix = np.dot(covariates, covariates.T)
+            covariate_hsic_matrix = centered_kernel_matrix(covariates)
         else:
-            c_kernel_matrix = np.zeros((n, n))
+            covariate_hsic_matrix = np.zeros((n, n))
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
@@ -336,14 +329,12 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k, mode=self.knn_mode, metric=self.manifold_metric)
             Q_ = self.sigma_ * unit_matrix + np.dot(
-                J
-                + self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix])
-                + self.mu / np.square(n) * lap_mat,
+                J + self.lambda_ / np.square(n - 1) * covariate_hsic_matrix + self.mu / np.square(n) * lap_mat,
                 x_kernel_matrix,
             )
         else:
             Q_ = self.sigma_ * unit_matrix + np.dot(
-                J + self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix]),
+                J + self.lambda_ / np.square(n - 1) * covariate_hsic_matrix,
                 x_kernel_matrix,
             )
 

@@ -5,7 +5,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.neighbors import kneighbors_graph
 
-from ._backend import infer_backend, to_backend, to_numpy
+from kalelinear.utils._backend import infer_backend, to_backend, to_numpy
 
 
 def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True):
@@ -88,6 +88,29 @@ def centering_matrix(size, dtype=np.float64):
     """Generate a centering matrix."""
     unit_matrix = np.eye(size, dtype=dtype)
     return unit_matrix - 1.0 / size * np.ones((size, size), dtype=dtype)
+
+
+def centered_kernel_matrix(X, kernel="linear", metric=None, filter_params=True, **kwargs):
+    """Compute a centered kernel matrix for samples in X."""
+    backend = infer_backend(X)
+    x_np = to_numpy(X)
+    kernel_metric = kernel if metric is None else metric
+
+    kernel_matrix = pairwise_kernels(x_np, metric=kernel_metric, filter_params=filter_params, **kwargs)
+    kernel_matrix[np.isnan(kernel_matrix)] = 0
+    h_matrix = centering_matrix(kernel_matrix.shape[0], dtype=kernel_matrix.dtype)
+    centered_kernel = multi_dot([h_matrix, kernel_matrix, h_matrix])
+    return to_backend(centered_kernel, backend, reference=X)
+
+
+def hsic_grad_term(w, X, covariates):
+    """Compute X.T H C C.T H X w for linear-kernel HSIC regularization."""
+    backend = infer_backend(w, X, covariates)
+    w_np = to_numpy(w)
+    x_np = to_numpy(X)
+    centered_covariate_kernel = to_numpy(centered_kernel_matrix(covariates))
+    grad_term = multi_dot([x_np.T, centered_covariate_kernel, x_np, w_np])
+    return to_backend(grad_term, backend, reference=w if backend != "numpy" else X)
 
 
 def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, return_backend=False, **kwargs):

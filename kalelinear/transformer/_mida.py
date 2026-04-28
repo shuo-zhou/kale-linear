@@ -6,12 +6,10 @@
 from numbers import Real
 
 from numpy.linalg import multi_dot
-from sklearn.metrics.pairwise import pairwise_kernels
-from sklearn.preprocessing import KernelCenterer
 from sklearn.utils._param_validation import Interval
 
 from kalelinear.transformer._base import _num_features, BaseKernelDomainTransformer
-from kalelinear.utils import centering_matrix
+from kalelinear.utils import centered_kernel_matrix, centering_matrix
 
 
 class MIDA(BaseKernelDomainTransformer):
@@ -91,12 +89,8 @@ class MIDA(BaseKernelDomainTransformer):
 
     def _make_eigenproblem(self, x_kernel_matrix, context):
         h = centering_matrix(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
-        y_kernel_matrix = pairwise_kernels(context.y_encoded, n_jobs=self.n_jobs)
-        covariate_kernel = pairwise_kernels(context.covariates_fit, n_jobs=self.n_jobs)
-
-        centerer = KernelCenterer()
-        y_kernel_matrix = centerer.fit_transform(y_kernel_matrix)
-        covariate_kernel = centerer.fit_transform(covariate_kernel)
+        y_kernel_matrix = centered_kernel_matrix(context.y_encoded, n_jobs=self.n_jobs)
+        covariate_kernel = centered_kernel_matrix(context.covariates_fit, n_jobs=self.n_jobs)
 
         return multi_dot(
             (x_kernel_matrix, self.mu * h + self.eta * y_kernel_matrix - covariate_kernel, x_kernel_matrix)

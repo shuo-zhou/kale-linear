@@ -11,8 +11,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
 from kalelinear._domain import split_source_target
-
-from ..utils import infer_backend, kernel_fit_matrices, to_backend, to_numpy
+from kalelinear.utils import infer_backend, kernel_fit_matrices, to_backend, to_numpy
 
 
 class BaseKaleEstimator(BaseEstimator, ClassifierMixin):

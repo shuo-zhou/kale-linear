@@ -1,6 +1,6 @@
 import numpy as np
 
-from ._backend import infer_backend, to_backend, to_numpy
+from kalelinear.utils._backend import infer_backend, to_backend, to_numpy
 
 
 def score2pred(scores):

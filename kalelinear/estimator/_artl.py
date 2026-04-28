@@ -7,9 +7,9 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
-from ..utils.multiclass import score2pred
-from .base import BaseDomainAdaptationEstimator
+from kalelinear.estimator.base import BaseDomainAdaptationEstimator
+from kalelinear.utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
+from kalelinear.utils.multiclass import score2pred
 
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
