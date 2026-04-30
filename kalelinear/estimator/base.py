@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
 from kalelinear._domain import split_source_target
-from kalelinear.utils import infer_backend, kernel_fit_matrices, to_backend, to_numpy
+from kalelinear.utils import kernel_fit_matrices, to_numpy
 
 
 class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
@@ -36,7 +36,6 @@ class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
         self.support_ = None
         self._lb = LabelBinarizer(pos_label=pos_label, neg_label=neg_label)
         self.kwargs = kwargs
-        self.backend_ = "numpy"
         self.X = None
         self.y = None
 
@@ -137,19 +136,17 @@ class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
         raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
 
     def decision_function(self, X):
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(
             x_np, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs
         )
         scores = np.dot(x_kernel_matrix, to_numpy(self.coef_))
-        return to_backend(scores, backend, reference=X)
+        return scores
 
     def predict(self, X):
-        backend = infer_backend(X)
         scores = to_numpy(self.decision_function(X))
         y_pred = self._lb.inverse_transform(scores)
-        return to_backend(y_pred, backend, reference=X)
+        return y_pred
 
 
 class BaseDomainAdaptationEstimator(BaseKaleEstimator):

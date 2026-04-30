@@ -8,8 +8,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils.validation import check_is_fitted
 
 from kalelinear.estimator.base import BaseDomainAdaptationEstimator
-from kalelinear.utils import infer_backend, lap_norm, mmd_coef, to_backend, to_numpy
-from kalelinear.utils.multiclass import score2pred
+from kalelinear.utils import lap_norm, mmd_coef, to_numpy
 
 # =============================================================================
 # Adaptation Regularisation Transfer Learning: ARTL
@@ -187,7 +186,7 @@ class ARSVM(BaseDomainAdaptationEstimator):
             treated as source rows.
         target_covariate : scalar, optional
             Domain value identifying target samples. Defaults to the last
-            sorted covariate value.
+            sorted unique covariate value.
         unlabeled_value : scalar, optional
             Sentinel used for unlabeled target rows when ``y`` is full length.
         Xt : array-like, optional
@@ -195,7 +194,6 @@ class ARSVM(BaseDomainAdaptationEstimator):
         yt : array-like, optional
             Legacy target labels.
         """
-        self.backend_ = infer_backend(X, y, covariates, Xt, yt)
         X, y, x_kernel_matrix, M, unit_matrix = _prepare_artl_fit_data(
             self,
             X,
@@ -251,11 +249,10 @@ class ARSVM(BaseDomainAdaptationEstimator):
         check_is_fitted(self, "X")
         check_is_fitted(self, "y")
         # x_fit = self.X
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)  # +self.intercept_
+        return scores  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -270,15 +267,8 @@ class ARSVM(BaseDomainAdaptationEstimator):
         array-like
             predicted labels, , shape (n_samples, )
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def fit_predict(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
@@ -294,7 +284,6 @@ class ARSVM(BaseDomainAdaptationEstimator):
         covariates : array-like, optional
             Binary domain labels aligned with ``X``.
         """
-        backend = infer_backend(X, y, covariates, Xt, yt)
         legacy_inputs = _uses_legacy_artl_inputs(X, covariates=covariates, Xt=Xt)
         legacy_target = Xt if Xt is not None else covariates
 
@@ -313,8 +302,7 @@ class ARSVM(BaseDomainAdaptationEstimator):
         else:
             predict_X = to_numpy(X)[self.target_idx_]
 
-        y_pred = self.predict(predict_X)
-        return to_backend(to_numpy(y_pred), backend, reference=predict_X if backend == "torch" else None)
+        return self.predict(predict_X)
 
 
 class ARRLS(BaseDomainAdaptationEstimator):
@@ -392,7 +380,6 @@ class ARRLS(BaseDomainAdaptationEstimator):
         yt : array-like, optional
             Legacy target labels.
         """
-        self.backend_ = infer_backend(X, y, covariates, Xt, yt)
         X, y, x_kernel_matrix, M, unit_matrix = _prepare_artl_fit_data(
             self,
             X,
@@ -437,15 +424,8 @@ class ARRLS(BaseDomainAdaptationEstimator):
         array-like
             predicted labels, shape (n_samples)
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def decision_function(self, X):
         """Evaluates the decision function for the samples in X.
@@ -459,11 +439,10 @@ class ARRLS(BaseDomainAdaptationEstimator):
         array-like
             prediction scores, shape (n_samples)
         """
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)
+        return scores
 
     def fit_predict(self, X, y, covariates=None, target_covariate=None, unlabeled_value=None, Xt=None, yt=None):
         """Fit the model according to the given training data and then perform
@@ -479,7 +458,6 @@ class ARRLS(BaseDomainAdaptationEstimator):
         covariates : array-like, optional
             Binary domain labels aligned with ``X``.
         """
-        backend = infer_backend(X, y, covariates, Xt, yt)
         legacy_inputs = _uses_legacy_artl_inputs(X, covariates=covariates, Xt=Xt)
         legacy_target = Xt if Xt is not None else covariates
 
@@ -498,5 +476,4 @@ class ARRLS(BaseDomainAdaptationEstimator):
         else:
             predict_X = to_numpy(X)[self.target_idx_]
 
-        y_pred = self.predict(predict_X)
-        return to_backend(to_numpy(y_pred), backend, reference=predict_X if backend == "torch" else None)
+        return self.predict(predict_X)

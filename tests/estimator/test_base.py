@@ -65,23 +65,3 @@ def test_semi_binary_dual_support_uses_nonzero_alphas(monkeypatch):
     )
 
     assert np.array_equal(support, np.array([2, 3]))
-
-
-def test_base_kale_estimator_decision_function_supports_torch_backend():
-    torch = pytest.importorskip("torch")
-
-    X_train = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
-    estimator = BaseKaleEstimator()
-    estimator.coef_ = np.array([2.0, -1.0])
-    estimator._lb.fit(
-        np.array([0, 1]),
-    )
-    estimator.X = X_train
-
-    scores = estimator.decision_function(X_train)
-    y_pred = estimator.predict(X_train)
-
-    assert isinstance(scores, torch.Tensor)
-    assert isinstance(y_pred, torch.Tensor)
-    assert scores.shape == (2,)
-    assert y_pred.shape == (2,)

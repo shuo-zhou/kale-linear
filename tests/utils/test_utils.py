@@ -3,7 +3,6 @@ import pytest
 from sklearn.utils.validation import check_random_state
 
 from kalelinear.utils import base_init, centered_kernel_matrix, centering_matrix, hsic_grad_term, lap_norm, mmd_coef
-from kalelinear.utils.multiclass import score2pred
 
 
 @pytest.fixture
@@ -65,25 +64,6 @@ def test_hsic_grad_term_matches_manual_linear_covariate_form(sample_data):
     grad_term = hsic_grad_term(w, sample_data, covariates)
 
     assert np.allclose(grad_term, sample_data.T @ centered_covariate_kernel @ sample_data @ w)
-
-
-def test_score2pred_selects_top_class_per_row():
-    scores = np.array(
-        [
-            [0.1, 0.8, 0.2],
-            [0.4, 0.3, 0.9],
-        ]
-    )
-
-    pred = score2pred(scores)
-
-    expected = np.array(
-        [
-            [-1.0, 1.0, -1.0],
-            [-1.0, -1.0, 1.0],
-        ]
-    )
-    assert np.array_equal(pred, expected)
 
 
 def make_domain_shifted_dataset(

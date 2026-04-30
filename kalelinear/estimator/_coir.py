@@ -14,11 +14,10 @@ from sklearn.preprocessing import LabelBinarizer
 
 from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
 from kalelinear.estimator.base import BaseDomainAdaptationEstimator
-from kalelinear.utils import centered_kernel_matrix, infer_backend, lap_norm, to_backend, to_numpy
+from kalelinear.utils import centered_kernel_matrix, lap_norm, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from kalelinear.utils.multiclass import score2pred
 
 
 def _fit_model_covariates(estimator, covariates, n_samples):
@@ -119,7 +118,6 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
         self
             [description]
         """
-        self.backend_ = infer_backend(X, y, covariates)
         X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
@@ -183,11 +181,10 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_classes) for multi-class cases
         """
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)  # +self.intercept_
+        return scores  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -202,15 +199,8 @@ class CoIRSVM(BaseDomainAdaptationEstimator):
         array-like
             predicted labels, shape (n_samples,)
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def fit_predict(self, X, y, covariates):
         """Fit the model according to the given training data and then perform classification on samples in X.
@@ -311,7 +301,6 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         self
             [description]
         """
-        self.backend_ = infer_backend(X, y, covariates)
         X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
             X, y, covariates, kernel=self.kernel, **self.kwargs
         )
@@ -360,11 +349,10 @@ class CoIRLS(BaseDomainAdaptationEstimator):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_classes) for multi-class cases
         """
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)  # +self.intercept_
+        return scores  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -379,15 +367,8 @@ class CoIRLS(BaseDomainAdaptationEstimator):
         array-like
             predicted labels, shape (n_samples,)
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def fit_predict(self, X, y, covariates=None):
         """Fit the model according to the given training data and then perform

@@ -50,7 +50,7 @@ def split_domain_indices(covariates, target_covariate=None, *, unique_covariates
         unique_covariates = np.unique(covariates)
 
     if target_covariate is None:
-        target_covariate = unique_covariates[0]
+        target_covariate = unique_covariates[-1]  # default to the last unique value as target domain
     elif target_covariate not in unique_covariates:
         raise ValueError("`target_covariate` must match one of the observed covariate values.")
 

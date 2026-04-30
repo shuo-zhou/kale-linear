@@ -1,8 +1,6 @@
 from time import time
 
 import numpy as np
-
-# import torch
 from scipy.special import expit
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
@@ -155,7 +153,7 @@ class GSDA(BaseKaleEstimator):
             ),
         )
         # ensure X, y, and groups have compatible shapes
-        if n_samples < y.shape[0]:
+        if n_samples < y.shape[0] or n_samples < groups.shape[0]:
             raise ValueError("Mismatched number of samples between X, y, and groups.")
         if isinstance(target_idx, (list, np.ndarray)) and len(target_idx) > y.shape[0]:
             raise ValueError("Length of target_idx cannot exceed number of target samples.")
