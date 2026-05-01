@@ -20,9 +20,9 @@ def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
     metric : str, optional
         [description], by default 'cosine'
     mode : str, optional
-        {‘connectivity’, ‘distance’}, by default 'distance'. Type of
-        returned matrix: ‘connectivity’ will return the connectivity
-        matrix with ones and zeros, and ‘distance’ will return the
+        {'connectivity', 'distance'}, by default 'distance'. Type of
+        returned matrix: 'connectivity' will return the connectivity
+        matrix with ones and zeros, and 'distance' will return the
         distances between neighbors according to the given metric.
     normalise : bool, optional
         [description], by default True
@@ -109,7 +109,7 @@ def hsic_grad_term(w, X, covariates):
     return np.asarray(grad_term)
 
 
-def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, return_backend=False, **kwargs):
+def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, **kwargs):
     """Prepare common fit-time kernel, identity, and centering matrices."""
     x_np = to_numpy(X)
     n = x_np.shape[0]
@@ -119,10 +119,7 @@ def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, ret
     x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
 
     unit_matrix = np.eye(n)
-    h_matrix = centering_matrix(n)
-
-    if not return_backend:
-        return x_kernel_matrix, unit_matrix, h_matrix, n
+    h_matrix = centering_matrix(n, dtype=x_kernel_matrix.dtype)
 
     return (
         np.asarray(x_kernel_matrix),
@@ -133,4 +130,4 @@ def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, ret
 
 
 def base_init(X, kernel="linear", **kwargs):
-    return kernel_fit_matrices(X, kernel=kernel, return_backend=True, **kwargs)
+    return kernel_fit_matrices(X, kernel=kernel, **kwargs)
