@@ -5,7 +5,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.neighbors import kneighbors_graph
 
-from ._backend import infer_backend, to_backend, to_numpy
+from kalelinear.utils._backend import to_numpy
 
 
 def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True):
@@ -20,9 +20,9 @@ def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
     metric : str, optional
         [description], by default 'cosine'
     mode : str, optional
-        {‘connectivity’, ‘distance’}, by default 'distance'. Type of
-        returned matrix: ‘connectivity’ will return the connectivity
-        matrix with ones and zeros, and ‘distance’ will return the
+        {'connectivity', 'distance'}, by default 'distance'. Type of
+        returned matrix: 'connectivity' will return the connectivity
+        matrix with ones and zeros, and 'distance' will return the
         distances between neighbors according to the given metric.
     normalise : bool, optional
         [description], by default True
@@ -32,7 +32,6 @@ def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
     [type]
         [description]
     """
-    backend = infer_backend(X)
     x_np = to_numpy(X)
     n = x_np.shape[0]
     knn_graph = kneighbors_graph(x_np, n_neighbour, metric=metric, mode=mode).toarray()
@@ -50,11 +49,10 @@ def lap_norm(X, n_neighbour=3, metric="cosine", mode="distance", normalise=True)
         lap_mat = np.eye(n) - multi_dot([D_, W, D_])
     else:
         lap_mat = D - W
-    return to_backend(lap_mat, backend, reference=X)
+    return np.asarray(lap_mat)
 
 
 def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
-    backend = infer_backend(ys, yt)
     ys_np = to_numpy(ys) if ys is not None else None
     yt_np = to_numpy(yt) if yt is not None else None
     n = ns + nt
@@ -81,24 +79,55 @@ def mmd_coef(ns, nt, ys=None, yt=None, kind="marginal", mu=0.5):
             e[np.where(np.isinf(e))[0]] = 0
             Mc = Mc + np.dot(e, e.T)
         M = (1 - mu) * M + mu * Mc  # joint mmd coefficients
-    return to_backend(M, backend, reference=ys if ys is not None else yt)
+    return np.asarray(M)
 
 
-def base_init(X, kernel="linear", **kwargs):
-    backend = infer_backend(X)
+def centering_matrix(size, dtype=np.float64):
+    """Generate a centering matrix."""
+    unit_matrix = np.eye(size, dtype=dtype)
+    return unit_matrix - 1.0 / size * np.ones((size, size), dtype=dtype)
+
+
+def centered_kernel_matrix(X, kernel="linear", metric=None, filter_params=True, **kwargs):
+    """Compute a centered kernel matrix for samples in X."""
+    x_np = to_numpy(X)
+    kernel_metric = kernel if metric is None else metric
+
+    kernel_matrix = pairwise_kernels(x_np, metric=kernel_metric, filter_params=filter_params, **kwargs)
+    kernel_matrix[np.isnan(kernel_matrix)] = 0
+    h_matrix = centering_matrix(kernel_matrix.shape[0], dtype=kernel_matrix.dtype)
+    centered_kernel = multi_dot([h_matrix, kernel_matrix, h_matrix])
+    return np.asarray(centered_kernel)
+
+
+def hsic_grad_term(w, X, covariates):
+    """Compute X.T H C C.T H X w for linear-kernel HSIC regularization."""
+    w_np = to_numpy(w)
+    x_np = to_numpy(X)
+    centered_covariate_kernel = to_numpy(centered_kernel_matrix(covariates))
+    grad_term = multi_dot([x_np.T, centered_covariate_kernel, x_np, w_np])
+    return np.asarray(grad_term)
+
+
+def kernel_fit_matrices(X, kernel="linear", metric=None, filter_params=True, **kwargs):
+    """Prepare common fit-time kernel, identity, and centering matrices."""
     x_np = to_numpy(X)
     n = x_np.shape[0]
-    # Construct kernel matrix
-    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel, filter_params=True, **kwargs)
+    kernel_metric = kernel if metric is None else metric
+
+    x_kernel_matrix = pairwise_kernels(x_np, metric=kernel_metric, filter_params=filter_params, **kwargs)
     x_kernel_matrix[np.isnan(x_kernel_matrix)] = 0
 
     unit_matrix = np.eye(n)
-    # Construct centering matrix
-    centering_matrix = unit_matrix - 1.0 / n * np.ones((n, n))
+    h_matrix = centering_matrix(n, dtype=x_kernel_matrix.dtype)
 
     return (
-        to_backend(x_kernel_matrix, backend, reference=X),
-        to_backend(unit_matrix, backend, reference=X),
-        to_backend(centering_matrix, backend, reference=X),
+        np.asarray(x_kernel_matrix),
+        np.asarray(unit_matrix),
+        np.asarray(h_matrix),
         n,
     )
+
+
+def base_init(X, kernel="linear", **kwargs):
+    return kernel_fit_matrices(X, kernel=kernel, **kwargs)

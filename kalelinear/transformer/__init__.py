@@ -1,7 +1,7 @@
-from ._jda import BDA, JDA
-from ._mida import MIDA
-from ._mpca import MPCA
-from ._tca import TCA
+from kalelinear.transformer._jda import BDA, JDA
+from kalelinear.transformer._mida import MIDA
+from kalelinear.transformer._mpca import MPCA
+from kalelinear.transformer._tca import TCA
 
 __all__ = [
     "TCA",

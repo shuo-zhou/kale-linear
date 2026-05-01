@@ -2,8 +2,7 @@ import numpy as np
 import pytest
 from sklearn.utils.validation import check_random_state
 
-from kalelinear.utils import base_init, lap_norm, mmd_coef
-from kalelinear.utils.multiclass import score2pred
+from kalelinear.utils import base_init, centered_kernel_matrix, centering_matrix, hsic_grad_term, lap_norm, mmd_coef
 
 
 @pytest.fixture
@@ -49,23 +48,22 @@ def test_mmd_coef_raises_for_mismatched_labels():
         mmd_coef(3, 2, ys=ys, yt=yt, kind="joint")
 
 
-def test_score2pred_selects_top_class_per_row():
-    scores = np.array(
-        [
-            [0.1, 0.8, 0.2],
-            [0.4, 0.3, 0.9],
-        ]
-    )
+def test_centered_kernel_matrix_matches_manual_centering(sample_data):
+    centered_kernel = centered_kernel_matrix(sample_data)
+    manual_centering = centering_matrix(sample_data.shape[0])
+    manual_kernel = sample_data @ sample_data.T
 
-    pred = score2pred(scores)
+    assert np.allclose(centered_kernel, manual_centering @ manual_kernel @ manual_centering)
 
-    expected = np.array(
-        [
-            [-1.0, 1.0, -1.0],
-            [-1.0, -1.0, 1.0],
-        ]
-    )
-    assert np.array_equal(pred, expected)
+
+def test_hsic_grad_term_matches_manual_linear_covariate_form(sample_data):
+    w = np.array([0.25, -0.5])
+    covariates = np.array([[0.0], [0.0], [1.0], [1.0]])
+    centered_covariate_kernel = centered_kernel_matrix(covariates)
+
+    grad_term = hsic_grad_term(w, sample_data, covariates)
+
+    assert np.allclose(grad_term, sample_data.T @ centered_covariate_kernel @ sample_data @ w)
 
 
 def make_domain_shifted_dataset(

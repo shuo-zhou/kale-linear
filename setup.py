@@ -21,11 +21,6 @@ install_requires = [
     "tensorly",
 ]
 
-# Optional dependency for tensor input/output interoperability.
-torch_requires = [
-    "torch",
-]
-
 # Dependencies for all examples and tutorials
 example_requires = [
     "ipykernel",
@@ -76,15 +71,18 @@ setup(
     version="0.1.0a1",
     description="Non-deep knowledge-aware machine learning from multiple sources/views in Python",
     url="https://github.com/pykale/kale-linear",
-    author="Shuo Zhou",
-    author_email="shuo.zhou@sheffield.ac.uk",
+    author="The PyKale team",
+    author_email="pykale-group@sheffield.ac.uk",
+    project_urls={
+        "Bug Tracker": "https://github.com/pykale/kale-linear/issues",
+        "Source": "https://github.com/pykale/kale-linear",
+    },
     license="MIT License",
     packages=find_packages(exclude=("tests*", "examples*", "docs*")),
     install_requires=install_requires,
     extras_require={
-        "torch": torch_requires,
-        "full": full_requires + torch_requires,
-        "dev": dev_requires + torch_requires,
+        "full": full_requires,
+        "dev": dev_requires,
     },
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -8,11 +8,11 @@ from numbers import Real
 import numpy as np
 from sklearn.utils._param_validation import Interval
 
-from kalelinear.transformer._base import _centering_kernel, _num_features, BaseMMDDomainAdapter
-from kalelinear.utils import mmd_coef
+from kalelinear.transformer._base import _num_features, BaseMMDDomainTransformer
+from kalelinear.utils import centering_matrix, mmd_coef
 
 
-class JDA(BaseMMDDomainAdapter):
+class JDA(BaseMMDDomainTransformer):
     """Joint Distribution Adaptation.
 
     ``covariates`` represent binary domain labels of length ``n_samples``.
@@ -74,7 +74,7 @@ class JDA(BaseMMDDomainAdapter):
             )
             mmd_matrix[np.isnan(mmd_matrix)] = 0
 
-        h = _centering_kernel(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
+        h = centering_matrix(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
         identity = np.eye(_num_features(x_kernel_matrix), dtype=x_kernel_matrix.dtype)
 
         obj = x_kernel_matrix @ mmd_matrix @ x_kernel_matrix + self.lambda_ * identity
@@ -94,7 +94,7 @@ class BDA(JDA):
     """
 
     _parameter_constraints: dict = {
-        **BaseMMDDomainAdapter._parameter_constraints,
+        **BaseMMDDomainTransformer._parameter_constraints,
         "mu": [Interval(Real, 0, 1, closed="both")],
     }
 

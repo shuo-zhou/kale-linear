@@ -9,19 +9,37 @@ In Proceedings of the 34th AAAI Conference on Artificial Intelligence (AAAI 2020
 """
 
 import numpy as np
-from numpy.linalg import multi_dot
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
-from ..utils import base_init, infer_backend, lap_norm, to_backend, to_numpy
+from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
+from kalelinear.estimator.base import BaseDomainAdaptationEstimator
+from kalelinear.utils import centered_kernel_matrix, lap_norm, to_numpy
 
 # import cvxpy as cvx
 # from cvxpy.error import SolverError
-from ..utils.multiclass import score2pred
-from .base import BaseFramework
 
 
-class CoIRSVM(BaseFramework):
+def _fit_model_covariates(estimator, covariates, n_samples):
+    covariates, encoder = fit_covariate_encoder(
+        covariates,
+        estimator.covariate_encoder,
+        n_samples,
+        error_prefix="Covariates",
+    )
+    estimator.covariate_encoder_ = encoder
+    return check_numeric_covariates(
+        covariates,
+        n_samples,
+        error_prefix="Covariates",
+        numeric_error_message=(
+            "Covariates must be numeric when `covariate_encoder` is None. "
+            "Provide numeric covariates or set `covariate_encoder`."
+        ),
+    )
+
+
+class CoIRSVM(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         C=1.0,
@@ -32,6 +50,7 @@ class CoIRSVM(BaseFramework):
         manifold_metric="cosine",
         knn_mode="distance",
         solver="osqp",
+        covariate_encoder=None,
         **kwargs,
     ):
         """Covariate Independence Regularised Support Vector Machine
@@ -77,6 +96,7 @@ class CoIRSVM(BaseFramework):
         self.manifold_metric = manifold_metric
         self.k_neighbour = k_neighbour
         self.knn_mode = knn_mode
+        self.covariate_encoder = covariate_encoder
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
 
     def fit(self, X, y, covariates=None):
@@ -98,31 +118,25 @@ class CoIRSVM(BaseFramework):
         self
             [description]
         """
-        self.backend_ = infer_backend(X, y, covariates)
-        X = to_numpy(X)
-        y = to_numpy(y)
-        covariates = to_numpy(covariates)
-        x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
+        X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
+            X, y, covariates, kernel=self.kernel, **self.kwargs
+        )
+        covariates = _fit_model_covariates(self, covariates, n)
         if isinstance(covariates, np.ndarray):
-            c_kernel_matrix = np.dot(covariates, covariates.T)
+            covariate_hsic_matrix = centered_kernel_matrix(covariates)
         else:
-            c_kernel_matrix = np.zeros((n, n))
+            covariate_hsic_matrix = np.zeros((n, n))
         y_ = self._lb.fit_transform(y)
 
         Q_ = unit_matrix.copy()
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k_neighbour, metric=self.manifold_metric, mode=self.knn_mode)
             Q_ += np.dot(
-                self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix])
-                + self.mu / np.square(n) * lap_mat,
+                self.lambda_ / np.square(n - 1) * covariate_hsic_matrix + self.mu / np.square(n) * lap_mat,
                 x_kernel_matrix,
             )
         else:
-            Q_ += (
-                self.lambda_
-                * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix, x_kernel_matrix])
-                / np.square(n - 1)
-            )
+            Q_ += self.lambda_ * np.dot(covariate_hsic_matrix, x_kernel_matrix) / np.square(n - 1)
 
         self.coef_, self.support_ = self._solve_semi_dual(x_kernel_matrix, y_, Q_, self.C, self.solver)
 
@@ -167,11 +181,10 @@ class CoIRSVM(BaseFramework):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_classes) for multi-class cases
         """
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)  # +self.intercept_
+        return scores  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -186,15 +199,8 @@ class CoIRSVM(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def fit_predict(self, X, y, covariates):
         """Fit the model according to the given training data and then perform classification on samples in X.
@@ -219,7 +225,7 @@ class CoIRSVM(BaseFramework):
         return self.predict(X)
 
 
-class CoIRLS(BaseFramework):
+class CoIRLS(BaseDomainAdaptationEstimator):
     def __init__(
         self,
         sigma_=1.0,
@@ -230,6 +236,7 @@ class CoIRLS(BaseFramework):
         knn_mode="distance",
         manifold_metric="cosine",
         class_weight=None,
+        covariate_encoder=None,
         **kwargs,
     ):
         """Covariate Independence Regularised Least Square
@@ -273,6 +280,7 @@ class CoIRLS(BaseFramework):
         self.k = k
         self.knn_mode = knn_mode
         self.class_weight = class_weight
+        self.covariate_encoder = covariate_encoder
         self._lb = LabelBinarizer(pos_label=1, neg_label=-1)
         self.kwargs = kwargs
 
@@ -293,17 +301,16 @@ class CoIRLS(BaseFramework):
         self
             [description]
         """
-        self.backend_ = infer_backend(X, y, covariates)
-        X = to_numpy(X)
-        y = to_numpy(y)
-        covariates = to_numpy(covariates)
+        X, y, covariates, x_kernel_matrix, unit_matrix, _, n = self._prepare_kernel_fit_data(
+            X, y, covariates, kernel=self.kernel, **self.kwargs
+        )
+        covariates = _fit_model_covariates(self, covariates, n)
         # X, D = cat_data(Xl, Dl, Xu, Du)
         nl = y.shape[0]
-        x_kernel_matrix, unit_matrix, centering_matrix, n = base_init(X, kernel=self.kernel, **self.kwargs)
         if isinstance(covariates, np.ndarray):
-            c_kernel_matrix = np.dot(covariates, covariates.T)
+            covariate_hsic_matrix = centered_kernel_matrix(covariates)
         else:
-            c_kernel_matrix = np.zeros((n, n))
+            covariate_hsic_matrix = np.zeros((n, n))
 
         J = np.zeros((n, n))
         J[:nl, :nl] = np.eye(nl)
@@ -311,14 +318,12 @@ class CoIRLS(BaseFramework):
         if self.mu != 0:
             lap_mat = lap_norm(X, n_neighbour=self.k, mode=self.knn_mode, metric=self.manifold_metric)
             Q_ = self.sigma_ * unit_matrix + np.dot(
-                J
-                + self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix])
-                + self.mu / np.square(n) * lap_mat,
+                J + self.lambda_ / np.square(n - 1) * covariate_hsic_matrix + self.mu / np.square(n) * lap_mat,
                 x_kernel_matrix,
             )
         else:
             Q_ = self.sigma_ * unit_matrix + np.dot(
-                J + self.lambda_ / np.square(n - 1) * multi_dot([centering_matrix, c_kernel_matrix, centering_matrix]),
+                J + self.lambda_ / np.square(n - 1) * covariate_hsic_matrix,
                 x_kernel_matrix,
             )
 
@@ -344,11 +349,10 @@ class CoIRLS(BaseFramework):
             decision scores, shape (n_samples,) for binary classification,
             (n_samples, n_classes) for multi-class cases
         """
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(x_np, self.X, metric=self.kernel, filter_params=True, **self.kwargs)
         scores = np.dot(x_kernel_matrix, self.coef_)
-        return to_backend(scores, backend, reference=X)  # +self.intercept_
+        return scores  # +self.intercept_
 
     def predict(self, X):
         """Perform classification on samples in X.
@@ -363,15 +367,8 @@ class CoIRLS(BaseFramework):
         array-like
             predicted labels, shape (n_samples,)
         """
-        backend = infer_backend(X)
         dec = to_numpy(self.decision_function(X))
-        if self._lb.y_type_ == "binary":
-            y_pred_ = np.sign(dec).reshape(-1, 1)
-        else:
-            y_pred_ = score2pred(dec)
-
-        y_pred = self._lb.inverse_transform(to_numpy(y_pred_))
-        return to_backend(y_pred, backend, reference=X)
+        return self._lb.inverse_transform(dec, threshold=0)
 
     def fit_predict(self, X, y, covariates=None):
         """Fit the model according to the given training data and then perform

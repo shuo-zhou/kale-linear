@@ -23,7 +23,6 @@ known_third_party = [
     "numpy",
     "setuptools",
     "sphinx_rtd_theme",
-    "torch",
 ]
 profile = "black"
 line_length = 120

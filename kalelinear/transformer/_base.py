@@ -10,7 +10,7 @@ from numbers import Integral, Real
 import numpy as np
 import scipy.linalg as la
 from scipy.sparse.linalg import eigsh
-from sklearn.base import _fit_context, BaseEstimator, ClassNamePrefixFeaturesOutMixin, clone, TransformerMixin
+from sklearn.base import _fit_context, BaseEstimator, ClassNamePrefixFeaturesOutMixin, TransformerMixin
 from sklearn.metrics.pairwise import PAIRWISE_KERNEL_FUNCTIONS, pairwise_kernels
 from sklearn.preprocessing import FunctionTransformer, KernelCenterer, OneHotEncoder
 from sklearn.utils._arpack import _init_arpack_v0
@@ -26,6 +26,14 @@ from sklearn.utils.validation import (
     validate_data,
 )
 
+from kalelinear._covariates import (
+    check_numeric_covariates,
+    check_tabular_covariates,
+    fit_covariate_encoder,
+    to_dense_covariates,
+    transform_covariates,
+)
+from kalelinear._domain import check_binary_domain_covariates, split_domain_indices
 from kalelinear.utils import mmd_coef
 
 
@@ -48,13 +56,6 @@ class KernelFitContext:
     ys: np.ndarray | None = None
     yt: np.ndarray | None = None
     target_covariate: object | None = None
-
-
-def _centering_kernel(size, dtype=np.float64):
-    """Generate a centering matrix."""
-    identity = np.eye(size, dtype=dtype)
-    ones_matrix = np.ones((size, size), dtype)
-    return identity - ones_matrix / size
 
 
 def _get_eigenproblem_matrices(eigenproblem):
@@ -215,7 +216,7 @@ def _scale_eigenvectors(eigenvalues, eigenvectors):
     return eigenvectors_
 
 
-class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin, BaseEstimator):
+class BaseKernelDomainTransformer(ClassNamePrefixFeaturesOutMixin, TransformerMixin, BaseEstimator):
     """Base class for kernel domain adaptation methods.
 
     Subclasses operate on a feature matrix ``X`` and optional ``covariates``.
@@ -355,49 +356,30 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return False
 
     def _coerce_covariates_for_encoder(self, covariates):
-        covariates = np.asarray(covariates)
-        if covariates.ndim == 0 or covariates.ndim > 2:
-            raise ValueError("Covariates must be a 1D or 2D array-like object.")
-        if covariates.ndim == 1:
-            covariates = np.expand_dims(covariates, 1)
-        return covariates
+        return check_tabular_covariates(covariates, error_prefix="Covariates")
 
     def _to_dense_covariates(self, covariates):
-        if hasattr(covariates, "toarray"):
-            return covariates.toarray()
-        return covariates
+        return to_dense_covariates(covariates)
 
     def _fit_covariate_encoder(self, covariates):
         if covariates is None:
             self.covariate_encoder_ = None
             return None
 
-        if self.covariate_encoder is None:
-            self.covariate_encoder_ = None
-            return covariates
-
-        covariates_to_encode = self._coerce_covariates_for_encoder(covariates)
-        if self.covariate_encoder == "onehot":
-            encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-        else:
-            encoder = clone(self.covariate_encoder)
-
-        encoder.fit(covariates_to_encode)
-        encoded_covariates = encoder.transform(covariates_to_encode)
+        encoded_covariates, encoder = fit_covariate_encoder(
+            covariates,
+            self.covariate_encoder,
+            error_prefix="Covariates",
+        )
         self.covariate_encoder_ = encoder
-        return self._to_dense_covariates(encoded_covariates)
+        return encoded_covariates
 
     def _transform_covariates(self, covariates):
         if covariates is None:
             return None
 
         encoder = getattr(self, "covariate_encoder_", None)
-        if encoder is None:
-            return covariates
-
-        covariates_to_encode = self._coerce_covariates_for_encoder(covariates)
-        encoded_covariates = encoder.transform(covariates_to_encode)
-        return self._to_dense_covariates(encoded_covariates)
+        return transform_covariates(covariates, encoder, error_prefix="Covariates")
 
     def _validate_covariates(self, covariates, X):
         if covariates is None:
@@ -405,16 +387,15 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
                 raise ValueError(f"Covariates must be provided for `{self.__class__.__name__}` during `fit`.")
             return None, None
 
-        covariates = self._coerce_covariates_for_encoder(covariates)
-        if covariates.shape[0] != _num_samples(X):
-            raise ValueError("Covariates and X must have the same number of samples.")
-
-        covariate_dtype = covariates.dtype
-        if not (np.issubdtype(covariate_dtype, np.number) or np.issubdtype(covariate_dtype, np.bool_)):
-            raise ValueError(
+        covariates = check_numeric_covariates(
+            covariates,
+            _num_samples(X),
+            error_prefix="Covariates",
+            numeric_error_message=(
                 "Covariates must be numeric when `covariate_encoder` is None. "
                 "Provide numeric covariates or set `covariate_encoder`."
-            )
+            ),
+        )
 
         factor_validator = FunctionTransformer(validate=False)
         factor_validator.fit(covariates, X)
@@ -424,13 +405,12 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         if covariates is None:
             return None
 
-        covariates = self._coerce_covariates_for_encoder(covariates)
-        if covariates.shape[0] != _num_samples(X):
-            raise ValueError("Covariates and X must have the same number of samples.")
-
-        covariate_dtype = covariates.dtype
-        if not (np.issubdtype(covariate_dtype, np.number) or np.issubdtype(covariate_dtype, np.bool_)):
-            raise ValueError("Transformed covariates must be numeric.")
+        covariates = check_numeric_covariates(
+            covariates,
+            _num_samples(X),
+            error_prefix="Covariates",
+            numeric_error_message="Transformed covariates must be numeric.",
+        )
 
         if getattr(self, "covariates_fit_", None) is not None:
             fit_covariates = self.covariates_fit_
@@ -644,7 +624,7 @@ class BaseKernelDomainAdapter(ClassNamePrefixFeaturesOutMixin, TransformerMixin,
         return self.transform(X, covariates=covariates)
 
 
-class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
+class BaseMMDDomainTransformer(BaseKernelDomainTransformer):
     """Shared base for MMD-based kernel domain adaptation methods.
 
     ``covariates`` are interpreted as binary domain labels. They must contain
@@ -655,7 +635,7 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
     """
 
     _parameter_constraints: dict = {
-        **BaseKernelDomainAdapter._parameter_constraints,
+        **BaseKernelDomainTransformer._parameter_constraints,
         "lambda_": [Interval(Real, 0, None, closed="left")],
     }
 
@@ -714,18 +694,15 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
         if covariates is None:
             return None, None
 
-        covariates = np.asarray(covariates)
-        if covariates.ndim == 0 or covariates.ndim > 2 or (covariates.ndim == 2 and covariates.shape[1] != 1):
-            raise ValueError(f"Covariates for {self.__class__.__name__} must be a 1D array of binary domain labels.")
-        covariates = covariates.reshape(-1)
-        if covariates.shape[0] != _num_samples(X):
-            raise ValueError("Covariates and X must have the same number of samples.")
-        if not (np.issubdtype(covariates.dtype, np.number) or np.issubdtype(covariates.dtype, np.bool_)):
-            raise ValueError(f"Covariates for {self.__class__.__name__} should be numeric or boolean domain labels.")
-        if np.unique(covariates).size != 2:
-            raise ValueError(
+        covariates, _ = check_binary_domain_covariates(
+            covariates,
+            _num_samples(X),
+            require_numeric=True,
+            error_prefix=f"Covariates for {self.__class__.__name__}",
+            both_domains_message=(
                 f"Covariates for {self.__class__.__name__} must contain both source and target domain values."
-            )
+            ),
+        )
         return covariates, None
 
     def _validate_transform_covariates(self, covariates, X):
@@ -733,10 +710,10 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
             return None
 
         covariates = np.asarray(covariates)
-        if covariates.ndim == 0 or covariates.ndim > 2 or (covariates.ndim == 2 and covariates.shape[1] != 1):
+        if covariates.ndim == 2 and covariates.shape[1] == 1:
+            covariates = covariates.reshape(-1)
+        if covariates.ndim != 1:
             raise ValueError(f"Covariates for {self.__class__.__name__} must be a 1D array of binary domain labels.")
-
-        covariates = covariates.reshape(-1)
         if covariates.shape[0] != _num_samples(X):
             raise ValueError("Covariates and X must have the same number of samples.")
         if not (np.issubdtype(covariates.dtype, np.number) or np.issubdtype(covariates.dtype, np.bool_)):
@@ -759,14 +736,9 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
                 classes=classes,
             )
 
-        unique_covariates = np.unique(covariates)
-        if target_covariate is None:
-            target_covariate = unique_covariates[0]
-        elif target_covariate not in unique_covariates:
-            raise ValueError("`target_covariate` must match one of the observed covariate values.")
-
-        target_idx = np.where(covariates == target_covariate)[0]
-        source_idx = np.where(covariates != target_covariate)[0]
+        split = split_domain_indices(covariates, target_covariate)
+        source_idx = split.source_idx
+        target_idx = split.target_idx
 
         X_fit = np.vstack((X[source_idx], X[target_idx]))
         covariates_fit = np.concatenate((covariates[source_idx], covariates[target_idx]))
@@ -796,7 +768,8 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
                 raise ValueError("Number of labeled samples does not meet the required conditions.")
 
             unlabeled_value = self._get_unlabeled_value(y)
-            y_fit = np.full(ns + nt, unlabeled_value, dtype=object)
+            y_fit_dtype = y.dtype if np.issubdtype(y.dtype, np.number) else object
+            y_fit = np.full(ns + nt, unlabeled_value, dtype=y_fit_dtype)
             y_fit[:ns] = ys
             if yt is not None:
                 y_fit[ns + target_labeled_pos] = yt
@@ -818,7 +791,7 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
             nt=nt,
             ys=ys,
             yt=yt,
-            target_covariate=target_covariate,
+            target_covariate=split.target_covariate,
         )
 
     def _make_marginal_mmd_matrix(self, context):
@@ -831,3 +804,7 @@ class BaseMMDDomainAdapter(BaseKernelDomainAdapter):
 
     def _get_eigenvalue_order(self):
         return "ascending"
+
+
+BaseKernelDomainAdapter = BaseKernelDomainTransformer
+BaseMMDDomainAdapter = BaseMMDDomainTransformer

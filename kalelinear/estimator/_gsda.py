@@ -1,13 +1,13 @@
 from time import time
 
 import numpy as np
-
-# import torch
-from numpy.linalg import multi_dot
 from scipy.special import expit
-from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
+
+from kalelinear._covariates import check_numeric_covariates, fit_covariate_encoder
+from kalelinear.estimator.base import BaseKaleEstimator
+from kalelinear.utils import hsic_grad_term
 
 
 def simple_hsic_grad_term(w, X, groups):
@@ -29,10 +29,7 @@ def simple_hsic_grad_term(w, X, groups):
     array-like, shape (n_features,)
         Simplified HSIC gradient term.
     """
-    n = X.shape[0]
-    centering_matrix = np.eye(n) - np.ones((n, n)) / n
-
-    return multi_dot((X.T, centering_matrix, groups, groups.T, centering_matrix, X, w))
+    return hsic_grad_term(w, X, groups)
 
 
 def _compute_pred_loss(y, y_hat):
@@ -54,7 +51,7 @@ def _compute_pred_loss(y, y_hat):
     return pred_log_loss
 
 
-class GSDA(BaseEstimator, ClassifierMixin):
+class GSDA(BaseKaleEstimator):
     """Group-specific logistic classifier with HSIC regularization.
 
     Parameters
@@ -100,6 +97,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         optimizer="gd",
         memory_size=10,
         random_state=None,
+        covariate_encoder=None,
     ):
         self.lr = lr
         self.max_iter = max_iter
@@ -113,6 +111,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         self.optimizer = optimizer
         self.memory_size = memory_size
         self.random_state = random_state
+        self.covariate_encoder = covariate_encoder
 
     def fit(self, X, y, groups, target_idx=None):
         """Fit the GSDA classifier.
@@ -136,14 +135,28 @@ class GSDA(BaseEstimator, ClassifierMixin):
         X = np.asarray(X)
         n_samples = X.shape[0]
         y = np.asarray(y)
-        groups = np.asarray(groups)
+        groups, encoder = fit_covariate_encoder(
+            groups,
+            self.covariate_encoder,
+            n_samples,
+            error_prefix="Groups",
+        )
+        self.covariate_encoder_ = encoder
+        groups = check_numeric_covariates(
+            groups,
+            n_samples,
+            allow_none=False,
+            error_prefix="Groups",
+            numeric_error_message=(
+                "Groups must be numeric when `covariate_encoder` is None. "
+                "Provide numeric groups or set `covariate_encoder`."
+            ),
+        )
         # ensure X, y, and groups have compatible shapes
-        if n_samples < y.shape[0] or n_samples != groups.shape[0]:
+        if n_samples < y.shape[0] or n_samples < groups.shape[0]:
             raise ValueError("Mismatched number of samples between X, y, and groups.")
         if isinstance(target_idx, (list, np.ndarray)) and len(target_idx) > y.shape[0]:
             raise ValueError("Length of target_idx cannot exceed number of target samples.")
-        if groups.ndim == 1:
-            groups = groups.reshape((-1, 1))
         existing_losses = getattr(self, "losses", None)
         if isinstance(existing_losses, dict):
             self.losses = {key: [] for key in existing_losses}
@@ -376,7 +389,7 @@ class GSDA(BaseEstimator, ClassifierMixin):
         y_hat = expit(x_tgt @ self.theta_)
         # n_feature = X.shape[1]
         _simple_hsic = simple_hsic_grad_term(self.theta_, X, groups)
-        hsic_proba = expit(multi_dot((self.theta_, _simple_hsic)) / np.square(n_sample - 1))
+        hsic_proba = expit(np.dot(self.theta_, _simple_hsic) / np.square(n_sample - 1))
         grad_hsic = (hsic_proba - 1) * _simple_hsic / np.square(n_sample - 1)
 
         delta_grad = (x_tgt.T @ (y_hat - y)) / n_tgt

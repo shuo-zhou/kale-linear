@@ -10,11 +10,12 @@ from sklearn.exceptions import NotFittedError
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.preprocessing import LabelBinarizer
 
-from ..utils import infer_backend, to_backend, to_numpy
+from kalelinear._domain import split_source_target
+from kalelinear.utils import kernel_fit_matrices, to_numpy
 
 
-class BaseFramework(BaseEstimator, ClassifierMixin):
-    """Semi-supervised learning framework."""
+class BaseKaleEstimator(BaseEstimator, ClassifierMixin):
+    """Base class for Kale-Linear classifiers."""
 
     def __init__(
         self,
@@ -35,7 +36,6 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         self.support_ = None
         self._lb = LabelBinarizer(pos_label=pos_label, neg_label=neg_label)
         self.kwargs = kwargs
-        self.backend_ = "numpy"
         self.X = None
         self.y = None
 
@@ -136,19 +136,92 @@ class BaseFramework(BaseEstimator, ClassifierMixin):
         raise NotFittedError("This estimator is not fitted yet. Call 'fit' before using this estimator.")
 
     def decision_function(self, X):
-        backend = infer_backend(X)
         x_np = to_numpy(X)
         x_kernel_matrix = pairwise_kernels(
             x_np, self._get_fit_data(), metric=self.kernel, filter_params=True, **self.kwargs
         )
         scores = np.dot(x_kernel_matrix, to_numpy(self.coef_))
-        return to_backend(scores, backend, reference=X)
+        return scores
 
     def predict(self, X):
-        backend = infer_backend(X)
         scores = to_numpy(self.decision_function(X))
         y_pred = self._lb.inverse_transform(scores)
-        return to_backend(y_pred, backend, reference=X)
+        return y_pred
 
 
-__all__ = ["BaseFramework"]
+class BaseDomainAdaptationEstimator(BaseKaleEstimator):
+    """Base class for domain adaptation estimators."""
+
+    @staticmethod
+    def _prepare_kernel_fit_data(X, y=None, covariates=None, kernel="linear", **kwargs):
+        """Prepare numpy fit arrays and common kernel matrices."""
+        metric = kwargs.pop("metric", kernel)
+        filter_params = kwargs.pop("filter_params", True)
+        X = to_numpy(X)
+        y = to_numpy(y)
+        covariates = to_numpy(covariates)
+        x_kernel_matrix, unit_matrix, centering_matrix, n = kernel_fit_matrices(
+            X,
+            metric=metric,
+            filter_params=filter_params,
+            **kwargs,
+        )
+
+        return X, y, covariates, x_kernel_matrix, unit_matrix, centering_matrix, n
+
+    def _split_source_target_by_covariate(
+        self,
+        X,
+        y,
+        covariates,
+        target_covariate=None,
+        unlabeled_value=None,
+    ):
+        """Split combined domain data into source and target blocks."""
+        if covariates is None:
+            raise ValueError("`covariates` must be provided to identify source and target domains.")
+
+        X = to_numpy(X)
+        y = to_numpy(y)
+        covariates = to_numpy(covariates)
+
+        if y is None:
+            raise ValueError("`y` must contain source labels.")
+        split = split_source_target(X, covariates, target_covariate=target_covariate)
+        source_idx = split.source_idx
+        target_idx = split.target_idx
+        ns = source_idx.shape[0]
+        n_samples = X.shape[0]
+
+        y = np.asarray(y)
+        if y.shape[0] == ns:
+            ys = y
+            target_labeled_idx = np.array([], dtype=int)
+        elif y.shape[0] == n_samples:
+            ys = y[source_idx]
+            target_labels = y[target_idx]
+            if unlabeled_value is None:
+                target_labeled_mask = np.ones(target_idx.shape[0], dtype=bool)
+            else:
+                target_labeled_mask = target_labels != unlabeled_value
+            target_labeled_idx = target_idx[target_labeled_mask]
+        else:
+            raise ValueError("`y` must contain either source labels only or one label per sample in `X`.")
+
+        target_unlabeled_idx = np.setdiff1d(target_idx, target_labeled_idx, assume_unique=True)
+        target_fit_idx = np.concatenate([target_labeled_idx, target_unlabeled_idx])
+        yt = y[target_labeled_idx] if target_labeled_idx.size > 0 else None
+
+        return {
+            "Xs": X[source_idx],
+            "ys": ys,
+            "Xt": X[target_fit_idx],
+            "yt": yt,
+            "source_idx": source_idx,
+            "target_idx": target_idx,
+            "target_fit_idx": target_fit_idx,
+            "target_covariate": split.target_covariate,
+        }
+
+
+__all__ = ["BaseKaleEstimator", "BaseDomainAdaptationEstimator"]

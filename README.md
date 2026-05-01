@@ -34,13 +34,7 @@ Install the NumPy-based core package:
 pip install kalelinear
 ```
 
-Install optional PyTorch tensor interoperability support:
-
-```bash
-pip install "kalelinear[torch]"
-```
-
-The library computes with NumPy and scikit-learn internally. Installing `torch` enables `torch.Tensor` interoperability for supported APIs, but it does not switch the numerical kernels to native PyTorch. In particular, some estimators round-trip `torch.Tensor` inputs and outputs, while transformer APIs that rely on scikit-learn validation may still return NumPy arrays.
+Kale-Linear expects NumPy-compatible array inputs and returns NumPy arrays.
 
 <!--
 ### Scikit-learn Style Implementation

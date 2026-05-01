@@ -6,11 +6,11 @@
 import numpy as np
 from numpy.linalg import multi_dot
 
-from kalelinear.transformer._base import _centering_kernel, _num_features, BaseMMDDomainAdapter
-from kalelinear.utils import lap_norm
+from kalelinear.transformer._base import _num_features, BaseMMDDomainTransformer
+from kalelinear.utils import centering_matrix, lap_norm
 
 
-class TCA(BaseMMDDomainAdapter):
+class TCA(BaseMMDDomainTransformer):
     """Transfer Component Analysis.
 
     ``covariates`` represent binary domain labels of length ``n_samples``.
@@ -61,7 +61,7 @@ class TCA(BaseMMDDomainAdapter):
         )
 
     def _make_eigenproblem(self, x_kernel_matrix, context):
-        h = _centering_kernel(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
+        h = centering_matrix(_num_features(x_kernel_matrix), x_kernel_matrix.dtype)
         identity = np.eye(_num_features(x_kernel_matrix), dtype=x_kernel_matrix.dtype)
         mmd_matrix = self._make_marginal_mmd_matrix(context)
 
